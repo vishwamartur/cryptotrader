@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState, useCallback } from "react"
-import crypto from "crypto"
+import { generateHmacSha256 } from "../lib/crypto-utils"
 
 interface WebSocketConfig {
   url: string
@@ -31,7 +31,7 @@ export function useWebSocket(config: WebSocketConfig) {
   const [error, setError] = useState<string | null>(null)
   const [reconnectAttempts, setReconnectAttempts] = useState(0)
   const wsRef = useRef<WebSocket | null>(null)
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const reconnectTimeoutRef = useRef<number | null>(null)
   const messageHandlersRef = useRef<Map<string, (data: any) => void>>(new Map())
 
   const { url, reconnectInterval = 5000, maxReconnectAttempts = 10 } = config
@@ -71,7 +71,7 @@ export function useWebSocket(config: WebSocketConfig) {
         setIsConnected(false)
 
         if (reconnectAttempts < maxReconnectAttempts) {
-          reconnectTimeoutRef.current = setTimeout(() => {
+          reconnectTimeoutRef.current = window.setTimeout(() => {
             setReconnectAttempts((prev) => prev + 1)
             connect()
           }, reconnectInterval)
@@ -92,7 +92,7 @@ export function useWebSocket(config: WebSocketConfig) {
 
   const disconnect = useCallback(() => {
     if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current)
+      window.clearTimeout(reconnectTimeoutRef.current)
     }
     if (wsRef.current) {
       wsRef.current.close()
@@ -110,10 +110,10 @@ export function useWebSocket(config: WebSocketConfig) {
   }, [])
 
   const authenticate = useCallback(
-    (apiKey: string, apiSecret: string) => {
+    async (apiKey: string, apiSecret: string) => {
       const timestamp = Math.floor(Date.now() / 1000).toString()
       const message = "GET" + timestamp + "/live"
-      const signature = crypto.createHmac("sha256", apiSecret).update(message).digest("hex")
+      const signature = await generateHmacSha256(message, apiSecret)
 
       const authMessage: AuthMessage = {
         type: "auth",

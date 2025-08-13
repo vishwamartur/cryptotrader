@@ -1,4 +1,4 @@
-import crypto from "crypto"
+import { generateHmacSha256 } from "./crypto-utils"
 
 // Delta Exchange API configuration
 const DELTA_BASE_URL = "https://api.delta.exchange"
@@ -18,17 +18,17 @@ export class DeltaExchangeAPI {
   }
 
   // Generate signature for authenticated requests
-  private generateSignature(
+  private async generateSignature(
     method: string,
     timestamp: string,
     requestPath: string,
     queryParams = "",
     body = "",
-  ): string {
+  ): Promise<string> {
     // Delta Exchange expects: method + timestamp + requestPath + queryParams + body
     // Query params should NOT include the leading "?" in signature
     const message = method + timestamp + requestPath + queryParams + body
-    return crypto.createHmac("sha256", this.apiSecret).update(message).digest("hex")
+    return await generateHmacSha256(message, this.apiSecret)
   }
 
   // Make authenticated API request
@@ -44,7 +44,7 @@ export class DeltaExchangeAPI {
     const bodyString = body ? JSON.stringify(body) : ""
 
     // For signature: query params without leading "?"
-    const signature = this.generateSignature(
+    const signature = await this.generateSignature(
       method.toUpperCase(),
       timestamp,
       requestPath,
@@ -71,9 +71,44 @@ export class DeltaExchangeAPI {
       })
 
       if (!response.ok) {
-        const errorText = await response.text()
-        console.error(`Delta Exchange API Error ${response.status}:`, errorText)
-        throw new Error(`Delta Exchange API error: ${response.status}`)
+        const errorMessage = `Delta Exchange API error: ${response.status}`
+
+        try {
+          const responseText = await response.text()
+          let errorData: any
+
+          try {
+            errorData = JSON.parse(responseText)
+          } catch {
+            // If JSON parsing fails, use the raw text
+            console.error(`Delta Exchange API Error ${response.status}:`, responseText)
+            throw new Error(`${errorMessage}: ${responseText}`)
+          }
+
+          console.error(`Delta Exchange API Error ${response.status}:`, errorData)
+
+          if (errorData.error?.code === "invalid_api_key") {
+            throw new Error(
+              "Invalid API key. Please check your Delta Exchange API credentials:\n" +
+                "1. Ensure you're using the correct API key\n" +
+                "2. Verify you're using production keys (not testnet)\n" +
+                "3. Check that your API key has trading permissions\n" +
+                "4. Make sure your API key hasn't expired\n" +
+                "Visit https://www.delta.exchange/app/api-management to manage your API keys.",
+            )
+          } else if (errorData.error?.code === "invalid_signature") {
+            throw new Error("Invalid signature. There may be an issue with your API secret or system time.")
+          } else if (errorData.error?.code === "insufficient_permissions") {
+            throw new Error("Insufficient permissions. Please enable trading permissions for your API key.")
+          } else if (errorData.error?.message) {
+            throw new Error(`Delta Exchange API: ${errorData.error.message}`)
+          } else {
+            throw new Error(`Delta Exchange API error: ${JSON.stringify(errorData)}`)
+          }
+        } catch (readError) {
+          console.error("Failed to read error response:", readError)
+          throw new Error(`${errorMessage}: Unable to read error details`)
+        }
       }
 
       return response.json()
