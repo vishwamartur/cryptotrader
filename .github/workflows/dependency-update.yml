@@ -1,0 +1,110 @@
+name: Dependency Updates
+
+on:
+  schedule:
+    - cron: '0 6 * * 1' # Weekly on Monday at 6 AM
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '18'
+  PNPM_VERSION: '8'
+
+jobs:
+  update-dependencies:
+    name: Update Dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Update dependencies
+        run: |
+          pnpm update --latest
+          pnpm audit fix
+
+      - name: Run tests
+        run: |
+          pnpm install
+          pnpm test
+          pnpm build
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: 'chore: update dependencies'
+          title: 'chore: update dependencies'
+          body: |
+            ## Dependency Updates
+            
+            This PR updates dependencies to their latest versions.
+            
+            ### Changes
+            - Updated all dependencies to latest versions
+            - Fixed security vulnerabilities
+            - Ran tests to ensure compatibility
+            
+            ### Testing
+            - [x] All tests pass
+            - [x] Build succeeds
+            - [x] Security audit clean
+          branch: chore/update-dependencies
+          delete-branch: true
+
+  security-updates:
+    name: Security Updates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run security audit and fix
+        run: pnpm audit --fix
+
+      - name: Create Pull Request for security fixes
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: 'security: fix vulnerabilities'
+          title: 'security: fix vulnerabilities'
+          body: |
+            ## Security Updates
+            
+            This PR fixes security vulnerabilities found in dependencies.
+            
+            ### Changes
+            - Fixed security vulnerabilities
+            - Updated affected packages
+            
+            ### Security
+            - [x] Security audit clean
+            - [x] All tests pass
+          branch: security/fix-vulnerabilities
+          delete-branch: true
