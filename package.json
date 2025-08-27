@@ -1,7 +1,38 @@
 {
   "name": "crypto-trading-platform",
   "version": "1.0.0",
-  "private": true,
+  "private": false,
+  "description": "Professional-grade AI-powered cryptocurrency trading platform with autonomous trading capabilities, advanced risk management, and real-time market analysis using Claude Sonnet 4 AI and Delta Exchange API",
+  "keywords": [
+    "cryptocurrency",
+    "trading",
+    "ai",
+    "algorithmic-trading",
+    "delta-exchange",
+    "claude-ai",
+    "risk-management",
+    "portfolio-optimization",
+    "autonomous-trading",
+    "nextjs",
+    "typescript",
+    "websocket",
+    "real-time",
+    "fintech"
+  ],
+  "homepage": "https://v0-crypto-trading-website-ashy.vercel.app",
+  "bugs": {
+    "url": "https://github.com/vishwamartur/crypto-trading-website/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vishwamartur/crypto-trading-website.git"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Vishwanath Martur",
+    "email": "64204611+vishwamartur@users.noreply.github.com",
+    "url": "https://github.com/vishwamartur"
+  },
   "scripts": {
     "analyze": "cross-env ANALYZE=true next build",
     "audit": "pnpm audit --audit-level moderate",
@@ -110,5 +141,9 @@
     "tailwindcss": "^4.1.9",
     "tw-animate-css": "1.3.3",
     "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
   }
 }
