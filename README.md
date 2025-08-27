@@ -1,16 +1,21 @@
 # AI-Powered Crypto Trading Platform
 
-*Automatically synced with your [v0.app](https://v0.app) deployments*
-
-[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://vercel.com/vishwamarturs-projects/v0-crypto-trading-website)
-[![Built with v0](https://img.shields.io/badge/Built%20with-v0.app-black?style=for-the-badge)](https://v0.app/chat/projects/IWry74AtpBh)
-
 ## 🚀 Overview
 
 A professional-grade, AI-powered cryptocurrency trading platform that combines advanced algorithmic trading capabilities with institutional-level risk management. Built with Next.js, TypeScript, and integrated with Delta Exchange API for live trading operations.
 
 ## ✨ Key Features
-
+### 🧠 Quantitative & Algorithmic Trading
+- **Quant Strategy Engine** - Modular framework for custom quant strategies
+- **Mathematics & Statistics** - Probability, distributions, hypothesis testing, time series analysis, regressions, risk metrics, optimization
+- **Backtesting** - Historical simulation with transaction costs, slippage, and bias controls
+- **Signal & Alpha Factor Design** - Custom factor templates for advanced research
+- **Portfolio Optimization** - Mean-variance, risk-parity, and factor models
+- **Machine Learning** - Prediction and anomaly detection (feature extraction, regression, z-score, TensorFlow.js integration)
+- **Reinforcement Learning** - RL environment and Q-learning agent for trading
+- **High-Frequency Trading (HFT)** - Real-time order book modeling, tick-level event-driven strategies, market making templates
+- **DeFi & DEX Trading** - Liquidity pool analytics, AMM strategies, DEX swap integration
+- **Algorithmic Execution** - TWAP, VWAP, POV, Iceberg order logic, execution strategy UI
 ### 🤖 AI Trading Engine
 - **Claude Sonnet 4 Integration** - Advanced AI-powered market analysis and autonomous trading decisions
 - **Multi-timeframe Analysis** - Technical indicators across multiple timeframes for comprehensive market assessment
@@ -128,7 +133,17 @@ npm run dev
 - **Extensible Architecture** - Easy integration with additional exchanges
 
 ## 🎯 Trading Strategies
-
+  
+### 🧩 Execution Strategies
+- **TWAP, VWAP, POV, Iceberg** - Algorithmic order slicing and execution
+  
+### ⚡ High-Frequency & DeFi
+- **HFT Engine** - Tick-level event-driven strategies, order book modeling
+- **DeFi Quant** - DEX/AMM integration, liquidity pool analytics, impermanent loss, APY
+  
+### 🤖 Machine & Reinforcement Learning
+- **ML Prediction** - Linear regression, anomaly detection, TensorFlow.js integration
+- **RL Trading** - Q-learning agent, trading environment, reward optimization
 - **Trend Following** - Momentum-based strategies with AI confirmation
 - **Mean Reversion** - Statistical arbitrage opportunities
 - **Breakout Trading** - Volume and volatility-based entries
