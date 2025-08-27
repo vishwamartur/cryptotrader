@@ -38,3 +38,25 @@ export class DummyMarketDataProvider implements MarketDataProvider {
     return data;
   }
 }
+
+
+// Template: Real financial API provider (e.g., Binance, Alpha Vantage)
+export class RealMarketDataProvider implements MarketDataProvider {
+  async getRealtimeData(symbol: string): Promise<MarketData> {
+    // TODO: Integrate with real API (fetch, axios, etc.)
+    // Example: fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`)
+    throw new Error('Not implemented');
+  }
+
+  async getHistoricalData(symbol: string, start: number, end: number): Promise<MarketData[]> {
+    // TODO: Integrate with real API and clean data (remove nulls, sort, etc.)
+    // Example: fetch historical candles, map to MarketData, filter bad data
+    throw new Error('Not implemented');
+  }
+
+  cleanData(data: MarketData[]): MarketData[] {
+    // Remove nulls, sort by timestamp, deduplicate
+    return data.filter(d => d && d.price != null && d.timestamp != null)
+      .sort((a, b) => a.timestamp - b.timestamp);
+  }
+}
