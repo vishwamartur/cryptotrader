@@ -164,6 +164,21 @@ export function TradingInterface() {
     return (p * a).toFixed(2)
   }
 
+  // Live Trading State
+  const [isLiveRunning, setIsLiveRunning] = useState(false)
+  const [liveLogs, setLiveLogs] = useState<any[]>([])
+
+  const handleStartLive = () => {
+    setIsLiveRunning(true)
+    setLiveLogs([]) // Clear logs on new session
+    // TODO: Implement live trading start logic
+  }
+
+  const handleStopLive = () => {
+    setIsLiveRunning(false)
+    // TODO: Implement live trading stop logic
+  }
+
   return (
     <>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -252,9 +267,43 @@ export function TradingInterface() {
                       </CardContent>
                     </Card>
                   </div>
-                      <AlertCircle className="h-3 w-3 mr-1" />
-                      API Required
-                    </Badge>
+                  {/* Live Trading Panel */}
+                  <div className="mt-8">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Live Trading</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="flex gap-4 mb-4">
+                          <Button onClick={handleStartLive} disabled={isLiveRunning} className="bg-blue-600 hover:bg-blue-700">Start Live</Button>
+                          <Button onClick={handleStopLive} disabled={!isLiveRunning} className="bg-gray-600 hover:bg-gray-700">Stop Live</Button>
+                        </div>
+                        <div className="text-xs">
+                          <strong>Status:</strong> {isLiveRunning ? "Running" : "Stopped"}
+                        </div>
+                        <div className="mt-2">
+                          <strong>Logs:</strong>
+                          <div className="max-h-40 overflow-auto border p-2 bg-muted">
+                            {liveLogs.length === 0 ? (
+                              <div>No logs yet.</div>
+                            ) : (
+                              liveLogs.map((log, idx) => (
+                                <div key={idx} className="mb-2">
+                                  <div>Time: {new Date(log.time).toLocaleTimeString()}</div>
+                                  <div>Signal: {log.signal.action}</div>
+                                  <div>Order: {log.order.action} {log.order.symbol} @ {log.order.price}</div>
+                                  <div>Result: {log.result.message}</div>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                  <AlertCircle className="h-3 w-3 mr-1" />
+                  API Required
+                </Badge>
                   )}
                   <Button variant="ghost" size="sm" onClick={() => setShowCredentialsDialog(true)}>
                     <Settings className="h-4 w-4" />
