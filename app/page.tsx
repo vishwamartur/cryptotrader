@@ -7,6 +7,11 @@ import { MarketOverview } from "@/components/market-overview"
 import { Portfolio } from "@/components/portfolio"
 import { Header } from "@/components/header"
 import { TradingInterface } from "@/components/trading-interface"
+import { AITradingPanel } from "@/components/ai-trading-panel"
+import { AutonomousAgentPanel } from "@/components/autonomous-agent-panel"
+import { RiskDashboard } from "@/components/risk-dashboard"
+import { TradeMonitor } from "@/components/trade-monitor"
+import { AdvancedTradingPanel } from "@/components/advanced-trading-panel"
 
 gsap.registerPlugin(ScrollTrigger)
 
@@ -76,9 +81,9 @@ export default function TradingDashboard() {
       </div>
 
       <main className="container mx-auto px-4 py-6 relative z-10">
-        <div ref={gridRef} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div ref={gridRef} className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           {/* Market Overview */}
-          <div className="lg:col-span-2 trading-card">
+          <div className="lg:col-span-3 trading-card">
             <MarketOverview />
           </div>
 
@@ -87,8 +92,28 @@ export default function TradingDashboard() {
             <Portfolio />
           </div>
 
+          <div className="lg:col-span-2 trading-card">
+            <AITradingPanel />
+          </div>
+
+          <div className="lg:col-span-2 trading-card">
+            <AutonomousAgentPanel />
+          </div>
+
+          <div className="lg:col-span-2 trading-card pulse-element">
+            <RiskDashboard />
+          </div>
+
+          <div className="lg:col-span-2 trading-card">
+            <TradeMonitor />
+          </div>
+
+          <div className="lg:col-span-2 trading-card">
+            <AdvancedTradingPanel />
+          </div>
+
           {/* Trading Interface */}
-          <div className="lg:col-span-3 trading-card">
+          <div className="lg:col-span-2 trading-card">
             <TradingInterface />
           </div>
         </div>

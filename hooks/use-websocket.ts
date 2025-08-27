@@ -42,11 +42,17 @@ export function useWebSocket(config: WebSocketConfig) {
         return
       }
 
+      if (!url || (!url.startsWith("ws://") && !url.startsWith("wss://"))) {
+        setError("Invalid WebSocket URL provided")
+        return
+      }
+
+      console.log("[v0] Attempting to connect to WebSocket:", url)
       const ws = new WebSocket(url)
       wsRef.current = ws
 
       ws.onopen = () => {
-        console.log("WebSocket connected")
+        console.log("[v0] WebSocket connected successfully")
         setIsConnected(true)
         setError(null)
         setReconnectAttempts(0)
@@ -55,6 +61,7 @@ export function useWebSocket(config: WebSocketConfig) {
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data)
+          console.log("[v0] WebSocket message received:", data)
           const channel = data.type || data.channel
 
           if (channel && messageHandlersRef.current.has(channel)) {
@@ -62,31 +69,93 @@ export function useWebSocket(config: WebSocketConfig) {
             handler?.(data)
           }
         } catch (err) {
-          console.error("Error parsing WebSocket message:", err)
+          console.error("[v0] Error parsing WebSocket message:", err, "Raw data:", event.data)
         }
       }
 
       ws.onclose = (event) => {
-        console.log("WebSocket disconnected:", event.code, event.reason)
+        console.log(
+          "[v0] WebSocket disconnected - Code:",
+          event.code,
+          "Reason:",
+          event.reason,
+          "Clean:",
+          event.wasClean,
+        )
         setIsConnected(false)
 
-        if (reconnectAttempts < maxReconnectAttempts) {
+        let errorMessage = "Connection closed"
+        switch (event.code) {
+          case 1000:
+            errorMessage = "Connection closed normally"
+            break
+          case 1001:
+            errorMessage = "Connection closed - going away"
+            break
+          case 1002:
+            errorMessage = "Connection closed - protocol error"
+            break
+          case 1003:
+            errorMessage = "Connection closed - unsupported data"
+            break
+          case 1006:
+            errorMessage = "Connection closed abnormally"
+            break
+          case 1011:
+            errorMessage = "Connection closed - server error"
+            break
+          case 1012:
+            errorMessage = "Connection closed - service restart"
+            break
+          default:
+            errorMessage = `Connection closed - Code: ${event.code}`
+        }
+
+        if (!event.wasClean && reconnectAttempts < maxReconnectAttempts) {
+          console.log("[v0] Attempting to reconnect in", reconnectInterval, "ms")
           reconnectTimeoutRef.current = window.setTimeout(() => {
             setReconnectAttempts((prev) => prev + 1)
             connect()
           }, reconnectInterval)
-        } else {
+        } else if (reconnectAttempts >= maxReconnectAttempts) {
           setError("Max reconnection attempts reached")
         }
       }
 
-      ws.onerror = (error) => {
-        console.error("WebSocket error:", error)
-        setError("WebSocket connection error")
+      ws.onerror = (errorEvent) => {
+        console.error("[v0] WebSocket error event:", errorEvent)
+
+        let errorMessage = "WebSocket connection error"
+
+        if (errorEvent instanceof ErrorEvent) {
+          errorMessage = `WebSocket error: ${errorEvent.message}`
+        } else if (errorEvent.target instanceof WebSocket) {
+          const ws = errorEvent.target
+          switch (ws.readyState) {
+            case WebSocket.CONNECTING:
+              errorMessage = "Failed to connect to WebSocket server"
+              break
+            case WebSocket.CLOSING:
+              errorMessage = "WebSocket connection is closing"
+              break
+            case WebSocket.CLOSED:
+              errorMessage = "WebSocket connection failed"
+              break
+            default:
+              errorMessage = "Unknown WebSocket error"
+          }
+        }
+
+        if (url.includes("delta.exchange") || url.includes("deltaex.org")) {
+          errorMessage += " - Please check if Delta Exchange WebSocket service is available"
+        }
+
+        console.error("[v0] WebSocket error details:", errorMessage)
+        setError(errorMessage)
       }
     } catch (err) {
-      console.error("Error creating WebSocket connection:", err)
-      setError("Failed to create WebSocket connection")
+      console.error("[v0] Error creating WebSocket connection:", err)
+      setError(`Failed to create WebSocket connection: ${err instanceof Error ? err.message : "Unknown error"}`)
     }
   }, [url, reconnectInterval, maxReconnectAttempts, reconnectAttempts])
 
@@ -111,18 +180,24 @@ export function useWebSocket(config: WebSocketConfig) {
 
   const authenticate = useCallback(
     async (apiKey: string, apiSecret: string) => {
-      const timestamp = Math.floor(Date.now() / 1000).toString()
-      const message = "GET" + timestamp + "/live"
-      const signature = await generateHmacSha256(message, apiSecret)
+      try {
+        const timestamp = Math.floor(Date.now() / 1000).toString()
+        const message = "GET" + timestamp + "/live"
+        const signature = await generateHmacSha256(message, apiSecret)
 
-      const authMessage: AuthMessage = {
-        type: "auth",
-        api_key: apiKey,
-        signature,
-        timestamp,
+        const authMessage: AuthMessage = {
+          type: "auth",
+          api_key: apiKey,
+          signature,
+          timestamp,
+        }
+
+        console.log("[v0] Sending authentication message")
+        sendMessage(authMessage)
+      } catch (err) {
+        console.error("[v0] Error during authentication:", err)
+        setError(`Authentication failed: ${err instanceof Error ? err.message : "Unknown error"}`)
       }
-
-      sendMessage(authMessage)
     },
     [sendMessage],
   )
