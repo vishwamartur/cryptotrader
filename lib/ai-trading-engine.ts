@@ -1,13 +1,16 @@
 import type { MarketData, Position } from "./types"
 
 export interface AITradingConfig {
-  apiKey: string
+  apiKey?: string
   model: string
-  riskTolerance: "conservative" | "moderate" | "aggressive"
-  maxPositionSize: number
-  stopLossPercentage: number
-  takeProfitPercentage: number
-  enableAutonomousTrading: boolean
+  maxTokens?: number
+  temperature?: number
+  systemPrompt?: string
+  riskTolerance?: "conservative" | "moderate" | "aggressive"
+  maxPositionSize?: number
+  stopLossPercentage?: number
+  takeProfitPercentage?: number
+  enableAutonomousTrading?: boolean
 }
 
 export interface MarketAnalysis {
@@ -37,28 +40,51 @@ export class AITradingEngine {
     this.isAnalyzing = true
 
     try {
-      const analysisPrompt = this.buildAnalysisPrompt(marketData, currentPositions, portfolioBalance)
+      // Use Anthropic API directly
+      const apiKey = this.config.apiKey || process.env.ANTHROPIC_API_KEY;
 
-      const response = await fetch("/api/ai/analyze-market", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          prompt: analysisPrompt,
-          config: this.config,
-          marketData,
-          positions: currentPositions,
-          balance: portfolioBalance,
-        }),
-      })
-
-      if (!response.ok) {
-        throw new Error(`AI analysis failed: ${response.statusText}`)
+      if (!apiKey) {
+        console.warn('No Anthropic API key provided, returning default analysis');
+        return this.getDefaultAnalysis(marketData[0]?.price || 45000);
       }
 
-      const analysis = await response.json()
-      return analysis
+      const analysisPrompt = this.buildAnalysisPrompt(marketData, currentPositions, portfolioBalance);
+
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01'
+        },
+        body: JSON.stringify({
+          model: this.config.model || 'claude-3-5-sonnet-20241022',
+          max_tokens: this.config.maxTokens || 4096,
+          temperature: this.config.temperature || 0.1,
+          system: this.config.systemPrompt || 'You are an expert cryptocurrency trading analyst.',
+          messages: [
+            {
+              role: 'user',
+              content: analysisPrompt
+            }
+          ]
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Anthropic API failed: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      const analysisText = result.content?.[0]?.text || '';
+
+      // Parse the AI response
+      return this.parseAIResponse(analysisText, marketData[0]?.price || 45000);
+
+    } catch (error) {
+      console.error("AI analysis error:", error);
+      // Return a safe default analysis
+      return this.getDefaultAnalysis(marketData[0]?.price || 45000);
     } finally {
       this.isAnalyzing = false
     }
@@ -156,5 +182,67 @@ Respond with a JSON object containing:
 
   updateConfig(newConfig: Partial<AITradingConfig>): void {
     this.config = { ...this.config, ...newConfig }
+  }
+
+  private parseAIResponse(analysisText: string, currentPrice: number): MarketAnalysis {
+    try {
+      // Try to extract JSON from the AI response
+      const jsonMatch = analysisText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        return {
+          signal: parsed.signal || 'HOLD',
+          confidence: Math.max(0, Math.min(1, parsed.confidence || 0.5)),
+          reasoning: parsed.reasoning || analysisText.substring(0, 200),
+          positionSize: Math.max(0, parsed.positionSize || 100),
+          entryPrice: parsed.entryPrice || currentPrice,
+          stopLoss: parsed.stopLoss || currentPrice * 0.95,
+          takeProfit: parsed.takeProfit || currentPrice * 1.05,
+          riskReward: parsed.riskReward || 1.0,
+          timestamp: Date.now()
+        };
+      }
+    } catch (error) {
+      console.warn('Failed to parse AI response as JSON:', error);
+    }
+
+    // Fallback: analyze text for sentiment
+    const text = analysisText.toLowerCase();
+    let signal: 'BUY' | 'SELL' | 'HOLD' = 'HOLD';
+    let confidence = 0.5;
+
+    if (text.includes('buy') || text.includes('bullish') || text.includes('positive')) {
+      signal = 'BUY';
+      confidence = 0.7;
+    } else if (text.includes('sell') || text.includes('bearish') || text.includes('negative')) {
+      signal = 'SELL';
+      confidence = 0.7;
+    }
+
+    return {
+      signal,
+      confidence,
+      reasoning: analysisText.substring(0, 200) + (analysisText.length > 200 ? '...' : ''),
+      positionSize: 100,
+      entryPrice: currentPrice,
+      stopLoss: currentPrice * (signal === 'BUY' ? 0.95 : 1.05),
+      takeProfit: currentPrice * (signal === 'BUY' ? 1.05 : 0.95),
+      riskReward: 1.0,
+      timestamp: Date.now()
+    };
+  }
+
+  private getDefaultAnalysis(currentPrice: number): MarketAnalysis {
+    return {
+      signal: 'HOLD',
+      confidence: 0.5,
+      reasoning: 'Default analysis - insufficient data or API unavailable',
+      positionSize: 100,
+      entryPrice: currentPrice,
+      stopLoss: currentPrice * 0.95,
+      takeProfit: currentPrice * 1.05,
+      riskReward: 1.0,
+      timestamp: Date.now()
+    };
   }
 }

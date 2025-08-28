@@ -420,5 +420,107 @@ export class EnhancedMarketDataProvider implements MarketDataProvider {
 }
 
 
+// Create a dummy provider for testing/demo purposes
+export class DummyMarketDataProvider {
+  private subscriptions: Map<string, MarketDataSubscription> = new Map();
+  private mockData: Map<string, MarketData> = new Map();
+
+  constructor() {
+    // Initialize with some mock data
+    this.mockData.set('BTC-USD', {
+      symbol: 'BTC-USD',
+      timestamp: Date.now(),
+      price: 45000 + (Math.random() - 0.5) * 1000,
+      volume: 1000000,
+      bid: 44995,
+      ask: 45005,
+      high24h: 46000,
+      low24h: 44000,
+      change: 500,
+      changePercent: 1.12,
+      lastUpdated: Date.now()
+    });
+
+    this.mockData.set('ETH-USD', {
+      symbol: 'ETH-USD',
+      timestamp: Date.now(),
+      price: 3000 + (Math.random() - 0.5) * 100,
+      volume: 500000,
+      bid: 2998,
+      ask: 3002,
+      high24h: 3100,
+      low24h: 2950,
+      change: 50,
+      changePercent: 1.67,
+      lastUpdated: Date.now()
+    });
+  }
+
+  async connect(): Promise<void> {
+    // Mock connection
+    return Promise.resolve();
+  }
+
+  async disconnect(): Promise<void> {
+    // Mock disconnection
+    return Promise.resolve();
+  }
+
+  subscribe(subscription: Omit<MarketDataSubscription, 'active'>): string {
+    const id = Math.random().toString(36).substr(2, 9);
+    this.subscriptions.set(id, { ...subscription, active: true });
+
+    // Simulate periodic data updates
+    setInterval(() => {
+      if (this.subscriptions.has(id)) {
+        const mockData = this.mockData.get(subscription.symbol);
+        if (mockData) {
+          // Update price with small random changes
+          mockData.price += (Math.random() - 0.5) * 10;
+          mockData.timestamp = Date.now();
+          mockData.lastUpdated = Date.now();
+          subscription.callback(mockData);
+        }
+      }
+    }, 1000);
+
+    return id;
+  }
+
+  unsubscribe(subscriptionId: string): void {
+    this.subscriptions.delete(subscriptionId);
+  }
+
+  async getRealtimeData(symbol: string): Promise<MarketData | null> {
+    const data = this.mockData.get(symbol);
+    if (data) {
+      // Update with fresh timestamp and slight price variation
+      return {
+        ...data,
+        price: data.price + (Math.random() - 0.5) * 5,
+        timestamp: Date.now(),
+        lastUpdated: Date.now()
+      };
+    }
+    return null;
+  }
+
+  getConnectionStatus(): ConnectionStatus {
+    return {
+      connected: true,
+      lastHeartbeat: Date.now(),
+      reconnectAttempts: 0,
+      latency: 50,
+      subscriptions: this.subscriptions.size,
+      messagesReceived: 100,
+      errors: []
+    };
+  }
+
+  isConnected(): boolean {
+    return true;
+  }
+}
+
 // Export the enhanced provider as the default
 export { EnhancedMarketDataProvider as DefaultMarketDataProvider };

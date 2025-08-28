@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { TrendingUp, User, Settings } from "lucide-react"
+import { TrendingUp, User, Settings, BarChart3 } from "lucide-react"
+import Link from "next/link"
 
 export function Header() {
   return (
@@ -18,6 +19,12 @@ export function Header() {
           </div>
 
           <div className="flex items-center gap-2">
+            <Link href="/dashboard">
+              <Button variant="ghost" size="sm">
+                <BarChart3 className="h-4 w-4" />
+                Dashboard
+              </Button>
+            </Link>
             <Button variant="ghost" size="sm">
               <Settings className="h-4 w-4" />
             </Button>

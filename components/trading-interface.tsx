@@ -39,6 +39,12 @@ const TRADING_PAIRS = [
 ]
 
 export function TradingInterface() {
+  // Quant Trading State (moved to top to avoid hoisting issues)
+  const [quantSymbol, setQuantSymbol] = useState("BTCUSDT")
+  const [quantSignal, setQuantSignal] = useState<QuantSignal | null>(null)
+  const [quantPrices, setQuantPrices] = useState<number[]>([])
+  const [isQuantLoading, setIsQuantLoading] = useState(false)
+
   // Quant Analytics State
   const [quantStats, setQuantStats] = useState<any>(null)
   useEffect(() => {
@@ -70,12 +76,6 @@ export function TradingInterface() {
   const [showCredentialsDialog, setShowCredentialsDialog] = useState(false)
 
   const { placeOrder, isPlacingOrder } = useTrading()
-  
-  // Quant Trading State
-  const [quantSymbol, setQuantSymbol] = useState("BTCUSDT")
-  const [quantSignal, setQuantSignal] = useState<QuantSignal | null>(null)
-  const [quantPrices, setQuantPrices] = useState<number[]>([])
-  const [isQuantLoading, setIsQuantLoading] = useState(false)
   const quantEngine = new QuantStrategyEngine()
   quantEngine.addStrategy(MovingAverageCrossoverStrategy)
   const marketProvider = new DummyMarketDataProvider()
