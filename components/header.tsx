@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { TrendingUp, User, Settings, BarChart3 } from "lucide-react"
+import { TrendingUp, User, Settings, BarChart3, Move } from "lucide-react"
 import Link from "next/link"
 
 export function Header() {
@@ -23,6 +23,18 @@ export function Header() {
               <Button variant="ghost" size="sm">
                 <BarChart3 className="h-4 w-4" />
                 Dashboard
+              </Button>
+            </Link>
+            <Link href="/advanced-dashboard">
+              <Button variant="ghost" size="sm">
+                <TrendingUp className="h-4 w-4" />
+                Advanced
+              </Button>
+            </Link>
+            <Link href="/advanced-dashboard-dnd">
+              <Button variant="ghost" size="sm">
+                <Move className="h-4 w-4" />
+                Drag & Drop
               </Button>
             </Link>
             <Button variant="ghost" size="sm">
