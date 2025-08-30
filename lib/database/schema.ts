@@ -227,6 +227,128 @@ export const tradingStrategiesRelations = relations(tradingStrategies, ({ one })
   }),
 }));
 
+// ML Models table
+export const mlModels = pgTable('ml_models', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: varchar('name', { length: 100 }).notNull(),
+  type: varchar('type', { length: 50 }).notNull(), // 'lstm', 'ensemble', 'reinforcement', 'sentiment', 'anomaly'
+  version: varchar('version', { length: 20 }).notNull(),
+  description: text('description'),
+  parameters: jsonb('parameters').notNull(),
+  architecture: jsonb('architecture'), // Model architecture details
+  trainingData: jsonb('training_data'), // Training data metadata
+  performance: jsonb('performance'), // Model performance metrics
+  status: varchar('status', { length: 20 }).default('training'), // 'training', 'active', 'deprecated', 'failed'
+  accuracy: decimal('accuracy', { precision: 5, scale: 4 }),
+  precision: decimal('precision', { precision: 5, scale: 4 }),
+  recall: decimal('recall', { precision: 5, scale: 4 }),
+  f1Score: decimal('f1_score', { precision: 5, scale: 4 }),
+  sharpeRatio: decimal('sharpe_ratio', { precision: 10, scale: 4 }),
+  maxDrawdown: decimal('max_drawdown', { precision: 10, scale: 4 }),
+  modelPath: varchar('model_path', { length: 255 }), // Path to saved model
+  lastTrainedAt: timestamp('last_trained_at'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => ({
+  nameVersionIdx: uniqueIndex('ml_models_name_version_idx').on(table.name, table.version),
+  typeIdx: index('ml_models_type_idx').on(table.type),
+  statusIdx: index('ml_models_status_idx').on(table.status),
+}));
+
+// ML Predictions table
+export const mlPredictions = pgTable('ml_predictions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  modelId: uuid('model_id').references(() => mlModels.id).notNull(),
+  symbol: varchar('symbol', { length: 20 }).notNull(),
+  predictionType: varchar('prediction_type', { length: 50 }).notNull(), // 'price', 'direction', 'volatility', 'sentiment'
+  timeframe: varchar('timeframe', { length: 20 }).notNull(), // '1m', '5m', '15m', '1h', '4h', '1d'
+  inputData: jsonb('input_data').notNull(), // Input features used for prediction
+  prediction: jsonb('prediction').notNull(), // Prediction output
+  confidence: decimal('confidence', { precision: 5, scale: 4 }).notNull(),
+  actualValue: decimal('actual_value', { precision: 20, scale: 8 }), // Actual outcome for validation
+  accuracy: decimal('accuracy', { precision: 5, scale: 4 }), // Prediction accuracy when actual is known
+  predictionTime: timestamp('prediction_time').notNull(),
+  targetTime: timestamp('target_time').notNull(), // When the prediction is for
+  validatedAt: timestamp('validated_at'),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => ({
+  modelIdIdx: index('ml_predictions_model_id_idx').on(table.modelId),
+  symbolIdx: index('ml_predictions_symbol_idx').on(table.symbol),
+  predictionTimeIdx: index('ml_predictions_prediction_time_idx').on(table.predictionTime),
+  targetTimeIdx: index('ml_predictions_target_time_idx').on(table.targetTime),
+}));
+
+// ML Features table
+export const mlFeatures = pgTable('ml_features', {
+  id: serial('id').primaryKey(),
+  symbol: varchar('symbol', { length: 20 }).notNull(),
+  timestamp: timestamp('timestamp').notNull(),
+  features: jsonb('features').notNull(), // All computed features
+  technicalIndicators: jsonb('technical_indicators'), // RSI, MACD, Bollinger Bands, etc.
+  marketMicrostructure: jsonb('market_microstructure'), // Order book, spread, volume profile
+  sentimentData: jsonb('sentiment_data'), // Social media, news sentiment
+  macroeconomic: jsonb('macroeconomic'), // Economic indicators
+  volatilityMetrics: jsonb('volatility_metrics'), // Various volatility measures
+  correlationData: jsonb('correlation_data'), // Cross-asset correlations
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => ({
+  symbolTimestampIdx: uniqueIndex('ml_features_symbol_timestamp_idx').on(table.symbol, table.timestamp),
+  timestampIdx: index('ml_features_timestamp_idx').on(table.timestamp),
+}));
+
+// ML Training Jobs table
+export const mlTrainingJobs = pgTable('ml_training_jobs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  modelId: uuid('model_id').references(() => mlModels.id).notNull(),
+  jobType: varchar('job_type', { length: 50 }).notNull(), // 'initial', 'retrain', 'hyperparameter_tuning'
+  status: varchar('status', { length: 20 }).default('queued'), // 'queued', 'running', 'completed', 'failed'
+  parameters: jsonb('parameters').notNull(),
+  trainingData: jsonb('training_data'), // Training data configuration
+  validationData: jsonb('validation_data'), // Validation data configuration
+  results: jsonb('results'), // Training results and metrics
+  logs: text('logs'), // Training logs
+  errorMessage: text('error_message'),
+  startedAt: timestamp('started_at'),
+  completedAt: timestamp('completed_at'),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => ({
+  modelIdIdx: index('ml_training_jobs_model_id_idx').on(table.modelId),
+  statusIdx: index('ml_training_jobs_status_idx').on(table.status),
+  createdAtIdx: index('ml_training_jobs_created_at_idx').on(table.createdAt),
+}));
+
+// ML Strategy Performance table
+export const mlStrategyPerformance = pgTable('ml_strategy_performance', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  strategyId: uuid('strategy_id').references(() => tradingStrategies.id).notNull(),
+  modelId: uuid('model_id').references(() => mlModels.id).notNull(),
+  portfolioId: uuid('portfolio_id').references(() => portfolios.id).notNull(),
+  timeframe: varchar('timeframe', { length: 20 }).notNull(),
+  startDate: timestamp('start_date').notNull(),
+  endDate: timestamp('end_date').notNull(),
+  totalTrades: integer('total_trades').default(0),
+  winningTrades: integer('winning_trades').default(0),
+  losingTrades: integer('losing_trades').default(0),
+  totalReturn: decimal('total_return', { precision: 20, scale: 8 }).default('0'),
+  sharpeRatio: decimal('sharpe_ratio', { precision: 10, scale: 4 }),
+  sortinoRatio: decimal('sortino_ratio', { precision: 10, scale: 4 }),
+  maxDrawdown: decimal('max_drawdown', { precision: 10, scale: 4 }),
+  volatility: decimal('volatility', { precision: 10, scale: 4 }),
+  beta: decimal('beta', { precision: 10, scale: 4 }),
+  alpha: decimal('alpha', { precision: 10, scale: 4 }),
+  informationRatio: decimal('information_ratio', { precision: 10, scale: 4 }),
+  calmarRatio: decimal('calmar_ratio', { precision: 10, scale: 4 }),
+  winRate: decimal('win_rate', { precision: 5, scale: 4 }),
+  avgWin: decimal('avg_win', { precision: 20, scale: 8 }),
+  avgLoss: decimal('avg_loss', { precision: 20, scale: 8 }),
+  profitFactor: decimal('profit_factor', { precision: 10, scale: 4 }),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => ({
+  strategyModelIdx: index('ml_strategy_performance_strategy_model_idx').on(table.strategyId, table.modelId),
+  portfolioIdx: index('ml_strategy_performance_portfolio_idx').on(table.portfolioId),
+  timeframeIdx: index('ml_strategy_performance_timeframe_idx').on(table.timeframe),
+}));
+
 // Export types
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
@@ -244,3 +366,13 @@ export type TradingStrategy = typeof tradingStrategies.$inferSelect;
 export type NewTradingStrategy = typeof tradingStrategies.$inferInsert;
 export type SystemHealthLog = typeof systemHealthLogs.$inferSelect;
 export type NewSystemHealthLog = typeof systemHealthLogs.$inferInsert;
+export type MLModel = typeof mlModels.$inferSelect;
+export type NewMLModel = typeof mlModels.$inferInsert;
+export type MLPrediction = typeof mlPredictions.$inferSelect;
+export type NewMLPrediction = typeof mlPredictions.$inferInsert;
+export type MLFeature = typeof mlFeatures.$inferSelect;
+export type NewMLFeature = typeof mlFeatures.$inferInsert;
+export type MLTrainingJob = typeof mlTrainingJobs.$inferSelect;
+export type NewMLTrainingJob = typeof mlTrainingJobs.$inferInsert;
+export type MLStrategyPerformance = typeof mlStrategyPerformance.$inferSelect;
+export type NewMLStrategyPerformance = typeof mlStrategyPerformance.$inferInsert;
