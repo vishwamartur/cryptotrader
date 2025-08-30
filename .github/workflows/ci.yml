@@ -8,7 +8,6 @@ on:
 
 env:
   NODE_VERSION: '18'
-  PNPM_VERSION: '8'
 
 jobs:
   lint-and-type-check:
@@ -22,36 +21,19 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v2
-        with:
-          version: ${{ env.PNPM_VERSION }}
-
-      - name: Get pnpm store directory
-        shell: bash
-        run: |
-          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
-
-      - name: Setup pnpm cache
-        uses: actions/cache@v3
-        with:
-          path: ${{ env.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
+          cache: 'npm'
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: npm ci
 
       - name: Run ESLint
-        run: pnpm lint
+        run: npm run lint
 
       - name: Run TypeScript check
-        run: pnpm type-check
+        run: npm run type-check
 
       - name: Run Prettier check
-        run: pnpm format:check
+        run: npm run format:check
 
   test:
     name: Run Tests
@@ -64,20 +46,16 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v2
-        with:
-          version: ${{ env.PNPM_VERSION }}
+          cache: 'npm'
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: npm ci
 
       - name: Run unit tests
-        run: pnpm test
+        run: npm test
 
       - name: Run integration tests
-        run: pnpm test:integration
+        run: npm run test:integration
 
       - name: Upload coverage reports
         uses: codecov/codecov-action@v3
@@ -97,20 +75,16 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v2
-        with:
-          version: ${{ env.PNPM_VERSION }}
+          cache: 'npm'
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: npm ci
 
       - name: Run security audit
-        run: pnpm audit
+        run: npm run audit
 
       - name: Run dependency check
-        run: pnpm security:check
+        run: npm run security:check
 
   build:
     name: Build Application
@@ -124,17 +98,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v2
-        with:
-          version: ${{ env.PNPM_VERSION }}
+          cache: 'npm'
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: npm ci
 
       - name: Build application
-        run: pnpm build
+        run: npm run build
         env:
           NEXT_TELEMETRY_DISABLED: 1
 
