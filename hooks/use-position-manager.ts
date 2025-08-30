@@ -21,6 +21,7 @@ export function usePositionManager() {
           maxDailyLoss: 1000,
           maxOpenPositions: 10,
           correlationLimit: 0.7,
+          riskPerTrade: 0.02,
         }),
       ),
   )

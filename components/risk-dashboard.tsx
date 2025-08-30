@@ -26,6 +26,7 @@ export function RiskDashboard() {
     maxDailyLoss: 1000,
     maxOpenPositions: 10,
     correlationLimit: 0.7,
+    riskPerTrade: 0.02,
   })
 
   const { positions, balance } = usePortfolio()

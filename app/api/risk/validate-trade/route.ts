@@ -3,9 +3,12 @@ import { RiskManager } from '@/lib/risk-management';
 
 // Initialize Risk Manager
 const riskManager = new RiskManager({
+  maxPortfolioRisk: 10,
   maxPositionSize: 10000,
   maxDailyLoss: 1000,
   maxDrawdown: 0.15,
+  maxOpenPositions: 10,
+  correlationLimit: 0.7,
   riskPerTrade: 0.02
 });
 
