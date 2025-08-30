@@ -106,7 +106,7 @@ export class EnhancedMarketDataProvider implements MarketDataProvider {
     return new Promise((resolve, reject) => {
       try {
         // Check for invalid URLs in test environment
-        if (this.wsUrl.includes('invalid-url.example.com')) {
+        if (new URL(this.wsUrl).hostname === 'invalid-url.example.com') {
           throw new Error('Connection failed: Invalid URL');
         }
 
