@@ -71,8 +71,8 @@ export class AITradingEngine {
         })
       });
 
-      if (!response.ok) {
-        throw new Error(`Anthropic API failed: ${response.statusText}`);
+      if (!response || !response.ok) {
+        throw new Error(`Anthropic API failed: ${response?.statusText || 'Network error'}`);
       }
 
       const result = await response.json();

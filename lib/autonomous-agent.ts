@@ -463,6 +463,11 @@ export class AutonomousAgent {
       this.intervalId = null
     }
 
+    if (this.heartbeatId) {
+      clearInterval(this.heartbeatId)
+      this.heartbeatId = null
+    }
+
     this.state.status = "STOPPED"
     this.notifySubscribers()
     console.log("Autonomous agent stopped")
@@ -472,6 +477,11 @@ export class AutonomousAgent {
     if (this.intervalId) {
       clearInterval(this.intervalId)
       this.intervalId = null
+    }
+
+    if (this.heartbeatId) {
+      clearInterval(this.heartbeatId)
+      this.heartbeatId = null
     }
 
     this.state.status = "PAUSED"
