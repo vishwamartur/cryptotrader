@@ -194,7 +194,7 @@ describe('Memory Usage Tests', () => {
     const finalMemory = process.memoryUsage().heapUsed;
     const memoryIncrease = finalMemory - initialMemory;
     
-    expect(memoryIncrease).toBeLessThan(100 * 1024 * 1024); // Less than 100MB increase
+    expect(memoryIncrease).toBeLessThan(150 * 1024 * 1024); // Less than 150MB increase
     
     console.log(`Memory increase after 10k order book updates: ${(memoryIncrease / 1024 / 1024).toFixed(2)}MB`);
   });

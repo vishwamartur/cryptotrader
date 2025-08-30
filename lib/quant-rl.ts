@@ -30,7 +30,7 @@ export interface TradingState {
   exposureRatio: number;
 }
 
-export type TradingAction = 0 | 1 | 2; // 0: sell/short, 1: hold, 2: buy/long
+export type TradingAction = 'buy' | 'sell' | 'hold';
 
 export interface TradingReward {
   total: number;
@@ -343,15 +343,19 @@ export class QLearningAgent {
 
   selectAction(state: number[]): TradingAction {
     // Epsilon-greedy action selection
+    const actions: TradingAction[] = ['sell', 'hold', 'buy'];
+
     if (Math.random() < this.epsilon) {
       // Random action (exploration)
-      return Math.floor(Math.random() * this.actionSpace) as TradingAction;
+      const randomIndex = Math.floor(Math.random() * this.actionSpace);
+      return actions[randomIndex];
     } else {
       // Greedy action (exploitation)
       const qValues = this.getQValues(state);
       const maxQ = Math.max(...qValues);
       const bestActions = qValues.map((q, i) => q === maxQ ? i : -1).filter(i => i !== -1);
-      return bestActions[Math.floor(Math.random() * bestActions.length)] as TradingAction;
+      const bestIndex = bestActions[Math.floor(Math.random() * bestActions.length)];
+      return actions[bestIndex];
     }
   }
 
@@ -515,22 +519,6 @@ export class RLTradingSystem {
 
   loadAgent(modelData: string): void {
     this.agent.loadModel(modelData);
-  }
-}
-    let reward = 0;
-    // Simple reward: PnL from position
-    if (action === 'buy') {
-      this.state.position = 1;
-    } else if (action === 'sell') {
-      this.state.position = -1;
-    } else {
-      // hold
-    }
-    reward = (nextPrice - prevPrice) * this.state.position;
-    this.state.price = nextPrice;
-    this.state.step = this.currentStep;
-    this.state.balance += reward;
-    return { nextState: { ...this.state }, reward, done: false };
   }
 }
 

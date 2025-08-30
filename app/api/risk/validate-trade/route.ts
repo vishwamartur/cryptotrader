@@ -81,7 +81,19 @@ export async function POST(request: NextRequest) {
     );
 
     // Calculate risk score and adjusted position size
-    const riskMetrics = riskManager.calculateRiskMetrics(positions, balance);
+    // Mock market data for risk calculation
+    const mockMarketData = positions.map(pos => ({
+      symbol: pos.product?.symbol || 'UNKNOWN',
+      price: parseFloat(pos.mark_price || '0'),
+      change: 0,
+      changePercent: 0,
+      volume: 0,
+      high24h: 0,
+      low24h: 0,
+      lastUpdated: new Date()
+    }));
+
+    const riskMetrics = riskManager.calculateRiskMetrics(positions, balance, mockMarketData);
     const riskScore = Math.min(riskMetrics.portfolioRisk, 1.0);
     
     // Adjust position size based on risk

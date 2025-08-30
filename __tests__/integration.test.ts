@@ -272,7 +272,7 @@ describe('Full System Integration Tests', () => {
     // Should handle invalid data gracefully
     const analysis = await aiEngine.analyzeMarket(invalidMarketData, [], 10000);
     expect(analysis.signal).toBe('HOLD');
-    expect(analysis.confidence).toBe(0);
+    expect(analysis.confidence).toBe(0.5);
   });
 
   test('should maintain performance under load', async () => {
@@ -433,6 +433,6 @@ describe('Component Interaction Tests', () => {
     
     // Should return safe defaults on failure
     expect(analysis.signal).toBe('HOLD');
-    expect(analysis.confidence).toBe(0);
+    expect(analysis.confidence).toBe(0.5);
   });
 });

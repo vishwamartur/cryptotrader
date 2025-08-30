@@ -117,7 +117,12 @@ export class MultipleLinearRegression {
       let biasGradient = 0;
 
       for (let i = 0; i < numSamples; i++) {
-        const prediction = this.predict(features[i]);
+        // Calculate prediction directly during training
+        let prediction = this.bias;
+        for (let k = 0; k < features[i].length; k++) {
+          prediction += this.weights[k] * features[i][k];
+        }
+
         const error = prediction - targets[i];
         totalLoss += error * error;
 
