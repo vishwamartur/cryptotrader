@@ -476,14 +476,19 @@ export class FeatureEngineeringService {
 
   // Get latest features for symbol
   static async getLatestFeatures(symbol: string): Promise<MLFeature | null> {
-    const [feature] = await db
-      .select()
-      .from(mlFeatures)
-      .where(eq(mlFeatures.symbol, symbol))
-      .orderBy(desc(mlFeatures.timestamp))
-      .limit(1);
-    
-    return feature || null;
+    try {
+      const [feature] = await db
+        .select()
+        .from(mlFeatures)
+        .where(eq(mlFeatures.symbol, symbol))
+        .orderBy(desc(mlFeatures.timestamp))
+        .limit(1);
+
+      return feature || null;
+    } catch (error) {
+      console.error('Error fetching latest features:', error);
+      return null;
+    }
   }
 
   // Bulk create features for multiple symbols

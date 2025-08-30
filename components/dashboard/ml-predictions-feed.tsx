@@ -21,13 +21,13 @@ interface MLPrediction {
   id: string;
   symbol: string;
   predictionType: string;
-  prediction: any;
+  prediction: Record<string, any> | null;
   confidence: number;
   predictionTime: string;
   targetTime: string;
   modelId: string;
-  accuracy?: number;
-  actualValue?: number;
+  accuracy?: number | null;
+  actualValue?: number | null;
 }
 
 interface MLPredictionsFeedProps {

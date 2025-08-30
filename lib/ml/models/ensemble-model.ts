@@ -350,18 +350,27 @@ export class EnsembleModel {
 
   // Simulated Random Forest prediction
   private async predictRandomForest(symbol: string, currentTime: Date): Promise<any> {
-    // Get current price for baseline
-    const latestData = await FeatureEngineeringService.getLatestFeatures(symbol);
-    const currentPrice = latestData ? (latestData.features as any).price || 50000 : 50000;
-    
-    const variation = (Math.random() - 0.5) * 0.05; // ±2.5% variation
-    const predictedPrice = currentPrice * (1 + variation);
-    
-    return {
-      price: predictedPrice,
-      confidence: 0.7 + Math.random() * 0.2,
-      direction: predictedPrice > currentPrice ? 'up' : (predictedPrice < currentPrice ? 'down' : 'sideways'),
-    };
+    try {
+      // Get current price for baseline
+      const latestData = await FeatureEngineeringService.getLatestFeatures(symbol);
+      const currentPrice = latestData ? (latestData.features as any)?.price || 50000 : 50000;
+
+      const variation = (Math.random() - 0.5) * 0.05; // ±2.5% variation
+      const predictedPrice = currentPrice * (1 + variation);
+
+      return {
+        price: predictedPrice,
+        confidence: 0.7 + Math.random() * 0.2,
+        direction: predictedPrice > currentPrice ? 'up' : (predictedPrice < currentPrice ? 'down' : 'sideways'),
+      };
+    } catch (error) {
+      console.error('Random Forest prediction error:', error);
+      return {
+        price: 50000,
+        confidence: 0.5,
+        direction: 'sideways',
+      };
+    }
   }
 
   // Simulated XGBoost prediction

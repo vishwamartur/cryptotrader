@@ -234,10 +234,10 @@ export const mlModels = pgTable('ml_models', {
   type: varchar('type', { length: 50 }).notNull(), // 'lstm', 'ensemble', 'reinforcement', 'sentiment', 'anomaly'
   version: varchar('version', { length: 20 }).notNull(),
   description: text('description'),
-  parameters: jsonb('parameters').notNull(),
-  architecture: jsonb('architecture'), // Model architecture details
-  trainingData: jsonb('training_data'), // Training data metadata
-  performance: jsonb('performance'), // Model performance metrics
+  parameters: jsonb('parameters').notNull().$type<Record<string, any>>(),
+  architecture: jsonb('architecture').$type<Record<string, any> | null>(), // Model architecture details
+  trainingData: jsonb('training_data').$type<Record<string, any> | null>(), // Training data metadata
+  performance: jsonb('performance').$type<Record<string, any> | null>(), // Model performance metrics
   status: varchar('status', { length: 20 }).default('training'), // 'training', 'active', 'deprecated', 'failed'
   accuracy: decimal('accuracy', { precision: 5, scale: 4 }),
   precision: decimal('precision', { precision: 5, scale: 4 }),
@@ -262,8 +262,8 @@ export const mlPredictions = pgTable('ml_predictions', {
   symbol: varchar('symbol', { length: 20 }).notNull(),
   predictionType: varchar('prediction_type', { length: 50 }).notNull(), // 'price', 'direction', 'volatility', 'sentiment'
   timeframe: varchar('timeframe', { length: 20 }).notNull(), // '1m', '5m', '15m', '1h', '4h', '1d'
-  inputData: jsonb('input_data').notNull(), // Input features used for prediction
-  prediction: jsonb('prediction').notNull(), // Prediction output
+  inputData: jsonb('input_data').notNull().$type<Record<string, any>>(), // Input features used for prediction
+  prediction: jsonb('prediction').notNull().$type<Record<string, any>>(), // Prediction output
   confidence: decimal('confidence', { precision: 5, scale: 4 }).notNull(),
   actualValue: decimal('actual_value', { precision: 20, scale: 8 }), // Actual outcome for validation
   accuracy: decimal('accuracy', { precision: 5, scale: 4 }), // Prediction accuracy when actual is known

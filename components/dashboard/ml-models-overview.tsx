@@ -5,18 +5,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { 
-  Brain, 
-  TrendingUp, 
-  TrendingDown, 
-  Activity, 
-  Zap,
+import {
+  Brain,
+  Activity,
   Target,
   BarChart3,
   RefreshCw,
   AlertTriangle,
   CheckCircle,
-  Clock
+  Clock,
+  Zap
 } from 'lucide-react';
 
 interface MLModel {
@@ -25,11 +23,11 @@ interface MLModel {
   type: string;
   version: string;
   status: string;
-  accuracy: number;
-  sharpeRatio: number;
-  maxDrawdown: number;
-  lastTrainedAt: string;
-  performance: any;
+  accuracy: number | null;
+  sharpeRatio: number | null;
+  maxDrawdown: number | null;
+  lastTrainedAt: string | null;
+  performance: Record<string, any> | null;
 }
 
 interface MLModelsOverviewProps {
@@ -277,7 +275,7 @@ export function MLModelsOverview({
 
                 {/* Last Trained */}
                 <div className="text-xs text-gray-500">
-                  Last trained: {new Date(model.lastTrainedAt).toLocaleString()}
+                  Last trained: {model.lastTrainedAt ? new Date(model.lastTrainedAt).toLocaleString() : 'Never'}
                 </div>
               </div>
             ))

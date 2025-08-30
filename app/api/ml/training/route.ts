@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { MLModelService } from '@/lib/ml/services/ml-model-service';
 import { LSTMModel } from '@/lib/ml/models/lstm-model';
 import { EnsembleModel } from '@/lib/ml/models/ensemble-model';
+import { isMLTrainingEnabled, validateModelConfig } from '@/lib/ml/config/ml-config';
 
 // Get training jobs
 export async function GET(request: NextRequest) {
@@ -60,13 +61,26 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Only allow in development mode for safety
-    if (process.env.NODE_ENV !== 'development') {
+    // Check if ML training is enabled and safe
+    if (!isMLTrainingEnabled()) {
       return NextResponse.json({
         success: false,
-        error: 'Model training can only be run in development mode',
+        error: 'Model training is not enabled. Set ML_TRAINING_ENABLED=true or run in development mode.',
         timestamp: new Date().toISOString(),
       }, { status: 403 });
+    }
+
+    // Validate model configuration
+    if (config) {
+      const validation = validateModelConfig(config);
+      if (!validation.valid) {
+        return NextResponse.json({
+          success: false,
+          error: 'Invalid model configuration',
+          details: validation.errors,
+          timestamp: new Date().toISOString(),
+        }, { status: 400 });
+      }
     }
 
     let trainingResult;

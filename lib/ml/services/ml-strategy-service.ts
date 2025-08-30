@@ -50,12 +50,24 @@ export class MLStrategyService {
     symbol: string,
     portfolioId: string
   ): Promise<MLTradingSignal | null> {
+    // Input validation
+    if (!strategyConfig || !symbol || !portfolioId) {
+      console.error('Invalid input parameters for trading signal generation');
+      return null;
+    }
+
+    if (!strategyConfig.models || strategyConfig.models.length === 0) {
+      console.error('No models specified in strategy configuration');
+      return null;
+    }
+
     console.log(`Generating ML trading signal for ${symbol}...`);
 
-    // Get active models for the strategy
-    const models = await Promise.all(
-      strategyConfig.models.map(modelId => MLModelService.getModelById(modelId))
-    );
+    try {
+      // Get active models for the strategy
+      const models = await Promise.all(
+        strategyConfig.models.map(modelId => MLModelService.getModelById(modelId))
+      );
 
     const activeModels = models.filter(model => model && model.status === 'active');
     
@@ -78,15 +90,19 @@ export class MLStrategyService {
       return null;
     }
 
-    // Analyze predictions and generate signal
-    const signal = await this.analyzePredictionsAndGenerateSignal(
-      symbol,
-      modelPredictions,
-      strategyConfig,
-      portfolioId
-    );
+      // Analyze predictions and generate signal
+      const signal = await this.analyzePredictionsAndGenerateSignal(
+        symbol,
+        modelPredictions,
+        strategyConfig,
+        portfolioId
+      );
 
-    return signal;
+      return signal;
+    } catch (error) {
+      console.error('Error generating trading signal:', error);
+      return null;
+    }
   }
 
   // Analyze model predictions and generate trading signal

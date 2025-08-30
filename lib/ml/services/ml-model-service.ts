@@ -148,16 +148,17 @@ export class MLModelService {
 
   // Validate prediction (update with actual value)
   static async validatePrediction(
-    id: string, 
+    id: string,
     actualValue: number
   ): Promise<MLPrediction | null> {
-    const prediction = await db.select().from(mlPredictions).where(eq(mlPredictions.id, id));
-    if (!prediction[0]) return null;
+    try {
+      const prediction = await db.select().from(mlPredictions).where(eq(mlPredictions.id, id));
+      if (!prediction[0]) return null;
 
-    const pred = prediction[0];
-    const predictedValue = typeof pred.prediction === 'object' && pred.prediction !== null 
-      ? (pred.prediction as any).value || 0 
-      : 0;
+      const pred = prediction[0];
+      const predictedValue = typeof pred.prediction === 'object' && pred.prediction !== null
+        ? (pred.prediction as any).value || 0
+        : Number(pred.prediction) || 0;
     
     // Calculate accuracy based on prediction type
     let accuracy = 0;
@@ -172,17 +173,21 @@ export class MLModelService {
       accuracy = Math.max(0, 1 - error);
     }
 
-    const [updatedPrediction] = await db
-      .update(mlPredictions)
-      .set({
-        actualValue: actualValue.toString(),
-        accuracy: accuracy.toString(),
-        validatedAt: new Date(),
-      })
-      .where(eq(mlPredictions.id, id))
-      .returning();
+      const [updatedPrediction] = await db
+        .update(mlPredictions)
+        .set({
+          actualValue: actualValue.toString(),
+          accuracy: accuracy.toString(),
+          validatedAt: new Date(),
+        })
+        .where(eq(mlPredictions.id, id))
+        .returning();
 
-    return updatedPrediction || null;
+      return updatedPrediction || null;
+    } catch (error) {
+      console.error('Error validating prediction:', error);
+      return null;
+    }
   }
 
   // Get model accuracy statistics

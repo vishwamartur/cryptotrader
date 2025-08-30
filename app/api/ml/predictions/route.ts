@@ -82,10 +82,12 @@ export async function POST(request: NextRequest) {
       };
 
       const lstmModel = new LSTMModel(lstmConfig);
-      
+
       try {
         // For demo purposes, we'll create a mock prediction
-        // In production, you'd train the model first
+        // In production, you'd train the model first or load a pre-trained model
+        console.log(`Generating LSTM prediction for ${symbol}...`);
+
         prediction = {
           symbol,
           predictedPrice: 47000 + (Math.random() - 0.5) * 2000,
@@ -97,6 +99,21 @@ export async function POST(request: NextRequest) {
             modelType: 'lstm',
             sequenceLength: lstmConfig.sequenceLength,
             predictionHorizon: lstmConfig.predictionHorizon,
+          },
+        };
+      } catch (error) {
+        console.error('LSTM prediction failed:', error);
+        // Fallback to simple prediction
+        prediction = {
+          symbol,
+          predictedPrice: 47000,
+          predictedDirection: 'sideways',
+          confidence: 0.5,
+          predictionTime: new Date(),
+          targetTime: new Date(Date.now() + 60 * 60 * 1000),
+          features: {
+            modelType: 'lstm',
+            error: 'Fallback prediction due to model error',
           },
         };
       } finally {

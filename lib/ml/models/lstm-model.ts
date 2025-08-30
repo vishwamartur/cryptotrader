@@ -214,6 +214,12 @@ export class LSTMModel {
   }> {
     console.log(`Training LSTM model for ${symbol}...`);
 
+    // Initialize TensorFlow.js if not already done
+    await initTensorFlow();
+    if (!tf) {
+      throw new Error('TensorFlow.js is not available. Training requires TensorFlow.js.');
+    }
+
     // Prepare training data
     const { X, y, scaler } = await this.prepareTrainingData(symbol, days);
     this.scaler = scaler;
