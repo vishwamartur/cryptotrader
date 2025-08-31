@@ -39,6 +39,7 @@ import { AlertsNotifications } from '@/components/dashboard/alerts-notifications
 import { QuickActions } from '@/components/dashboard/quick-actions';
 import { MLModelsOverview } from '@/components/dashboard/ml-models-overview';
 import { MLPredictionsFeed } from '@/components/dashboard/ml-predictions-feed';
+import { DeltaConnectionStatus } from '@/components/dashboard/delta-connection-status';
 
 // Types
 interface DashboardWidget {
@@ -163,6 +164,14 @@ const DEFAULT_WIDGETS: DashboardWidget[] = [
     size: 'medium',
     category: 'realtime',
     priority: 13
+  },
+  {
+    id: 'delta-connection',
+    title: 'Delta Exchange Status',
+    component: DeltaConnectionStatus,
+    size: 'small',
+    category: 'monitoring',
+    priority: 14
   }
 ];
 

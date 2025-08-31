@@ -1,11 +1,25 @@
 import { generateHmacSha256 } from "./crypto-utils"
 
 // Delta Exchange API configuration
-const DELTA_BASE_URL = "https://api.delta.exchange"
+const DELTA_BASE_URL = process.env.DELTA_BASE_URL || "https://api.delta.exchange"
 
 interface DeltaExchangeConfig {
   apiKey: string
   apiSecret: string
+}
+
+// Get Delta Exchange credentials from environment
+export function getDeltaCredentials(): DeltaExchangeConfig {
+  const apiKey = process.env.DELTA_API_KEY
+  const apiSecret = process.env.DELTA_API_SECRET
+
+  if (!apiKey || !apiSecret) {
+    throw new Error(
+      "Delta Exchange API credentials not found. Please set DELTA_API_KEY and DELTA_API_SECRET environment variables."
+    )
+  }
+
+  return { apiKey, apiSecret }
 }
 
 export class DeltaExchangeAPI {
@@ -162,7 +176,13 @@ export class DeltaExchangeAPI {
   }
 }
 
-// Utility function to create API instance
+// Utility function to create API instance with provided credentials
 export function createDeltaExchangeAPI(apiKey: string, apiSecret: string) {
   return new DeltaExchangeAPI({ apiKey, apiSecret })
+}
+
+// Utility function to create API instance with environment credentials
+export function createDeltaExchangeAPIFromEnv() {
+  const credentials = getDeltaCredentials()
+  return new DeltaExchangeAPI(credentials)
 }
