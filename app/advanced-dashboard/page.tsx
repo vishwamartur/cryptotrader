@@ -172,6 +172,14 @@ const DEFAULT_WIDGETS: DashboardWidget[] = [
     size: 'small',
     category: 'monitoring',
     priority: 14
+  },
+  {
+    id: 'alerts',
+    title: 'Alerts & Notifications',
+    component: AlertsNotifications,
+    size: 'small',
+    category: 'monitoring',
+    priority: 15
   }
 ];
 
@@ -190,6 +198,7 @@ export default function AdvancedDashboard() {
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'connecting'>('connecting');
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const [alerts, setAlerts] = useState<any[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
   // Theme management
   useEffect(() => {
@@ -268,6 +277,29 @@ export default function AdvancedDashboard() {
     URL.revokeObjectURL(url);
   };
 
+  // Widget management functions
+  const toggleWidget = useCallback((widgetId: string) => {
+    const widget = DEFAULT_WIDGETS.find(w => w.id === widgetId);
+    if (!widget) return;
+
+    const isActive = layout.widgets.some(w => w.id === widgetId);
+    if (isActive) {
+      saveLayout({ ...layout, widgets: layout.widgets.filter(w => w.id !== widgetId) });
+    } else {
+      const newWidgets = [...layout.widgets, widget].sort((a, b) => a.priority - b.priority);
+      saveLayout({ ...layout, widgets: newWidgets });
+    }
+  }, [layout]);
+
+  const dismissAlert = useCallback((id: string) => {
+    setAlerts(prev => prev.map(a => (a.id === id ? { ...a, dismissed: true } : a)));
+  }, []);
+
+  // Filter widgets by category
+  const filteredWidgets = selectedCategory === 'all'
+    ? layout.widgets
+    : layout.widgets.filter(widget => widget.category === selectedCategory);
+
   // Get widget size classes
   const getWidgetSizeClass = (size: string) => {
     switch (size) {
@@ -307,6 +339,17 @@ export default function AdvancedDashboard() {
             </div>
 
             <div className="flex items-center space-x-2">
+              {/* Category Filter */}
+              <Tabs value={selectedCategory} onValueChange={setSelectedCategory}>
+                <TabsList className="grid w-full grid-cols-5">
+                  <TabsTrigger value="all">All</TabsTrigger>
+                  <TabsTrigger value="realtime">Real-time</TabsTrigger>
+                  <TabsTrigger value="monitoring">Monitor</TabsTrigger>
+                  <TabsTrigger value="analytics">Analytics</TabsTrigger>
+                  <TabsTrigger value="controls">Controls</TabsTrigger>
+                </TabsList>
+              </Tabs>
+
               {/* Notifications toggle */}
               <Button
                 variant="ghost"
@@ -360,7 +403,7 @@ export default function AdvancedDashboard() {
             gridTemplateColumns: `repeat(${layout.columns}, minmax(0, 1fr))`
           }}
         >
-          {layout.widgets.map((widget, index) => {
+          {filteredWidgets.map((widget, index) => {
             const WidgetComponent = widget.component;
 
             return (
@@ -394,7 +437,7 @@ export default function AdvancedDashboard() {
                             variant="ghost"
                             size="sm"
                             onClick={() => moveWidget(widget.id, 'down')}
-                            disabled={index === layout.widgets.length - 1}
+                            disabled={index === filteredWidgets.length - 1}
                             className="h-6 w-6 p-0"
                           >
                             ↓
@@ -404,11 +447,19 @@ export default function AdvancedDashboard() {
                     </div>
                   </CardHeader>
                   <CardContent className="pt-0">
-                    <WidgetComponent
-                      theme={layout.theme}
-                      autoRefresh={layout.autoRefresh}
-                      refreshInterval={layout.refreshInterval}
-                    />
+                    {widget.id === 'alerts' ? (
+                      <AlertsNotifications
+                        theme={layout.theme}
+                        alerts={alerts}
+                        onDismiss={dismissAlert}
+                      />
+                    ) : (
+                      <WidgetComponent
+                        theme={layout.theme}
+                        autoRefresh={layout.autoRefresh}
+                        refreshInterval={layout.refreshInterval}
+                      />
+                    )}
                   </CardContent>
                 </Card>
               </div>
@@ -417,14 +468,7 @@ export default function AdvancedDashboard() {
         </div>
       </main>
 
-      {/* Alerts Notifications */}
-      {layout.notifications && (
-        <AlertsNotifications 
-          alerts={alerts}
-          theme={layout.theme}
-          onDismiss={(alertId) => setAlerts(prev => prev.filter(a => a.id !== alertId))}
-        />
-      )}
+
     </div>
   );
 }

@@ -1,19 +1,28 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
+import { useState, useEffect, useMemo } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  Minus, 
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  TrendingUp,
+  TrendingDown,
+  Minus,
   Activity,
   Volume2,
   ArrowUpRight,
-  ArrowDownRight
+  ArrowDownRight,
+  Search,
+  Filter,
+  RefreshCw,
+  Wifi,
+  WifiOff,
+  AlertCircle
 } from 'lucide-react';
-import { useRealtimeData } from '@/hooks/use-realtime-data';
+import { useDynamicMarketData } from '@/hooks/use-dynamic-market-data';
+import { RealtimeMarketData, ProductInfo } from '@/lib/realtime-market-data';
 
 interface LivePriceFeedsProps {
   theme: 'light' | 'dark';
@@ -23,13 +32,15 @@ interface LivePriceFeedsProps {
 
 interface PriceCardProps {
   symbol: string;
-  data: any;
+  data: RealtimeMarketData;
+  product: ProductInfo;
   theme: 'light' | 'dark';
   onClick: () => void;
   isSelected: boolean;
+  isLoading?: boolean;
 }
 
-function PriceCard({ symbol, data, theme, onClick, isSelected }: PriceCardProps) {
+function PriceCard({ symbol, data, product, theme, onClick, isSelected, isLoading }: PriceCardProps) {
   const [priceAnimation, setPriceAnimation] = useState<'up' | 'down' | null>(null);
   const [prevPrice, setPrevPrice] = useState(data?.price || 0);
 
@@ -37,13 +48,13 @@ function PriceCard({ symbol, data, theme, onClick, isSelected }: PriceCardProps)
     if (data?.price && data.price !== prevPrice) {
       setPriceAnimation(data.price > prevPrice ? 'up' : 'down');
       setPrevPrice(data.price);
-      
+
       const timer = setTimeout(() => setPriceAnimation(null), 1000);
       return () => clearTimeout(timer);
     }
   }, [data?.price, prevPrice]);
 
-  if (!data) {
+  if (isLoading || !data) {
     return (
       <Card className={`cursor-pointer transition-all duration-200 ${
         theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
@@ -87,9 +98,9 @@ function PriceCard({ symbol, data, theme, onClick, isSelected }: PriceCardProps)
           {/* Header */}
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
-              <span className="font-semibold text-lg">{symbol.replace('-', '/')}</span>
+              <span className="font-semibold text-lg">{symbol}</span>
               <Badge variant="outline" className="text-xs">
-                LIVE
+                {product.productType.replace('_', ' ').toUpperCase()}
               </Badge>
             </div>
             <div className="flex items-center space-x-1">
@@ -172,10 +183,13 @@ function PriceCard({ symbol, data, theme, onClick, isSelected }: PriceCardProps)
 }
 
 export function LivePriceFeeds({ theme, autoRefresh, refreshInterval }: LivePriceFeedsProps) {
-  const { marketData, connectionStatus, lastUpdate } = useRealtimeData();
+  const marketData = useDynamicMarketData();
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
-  const [sortBy, setSortBy] = useState<'symbol' | 'price' | 'change'>('symbol');
+  const [sortBy, setSortBy] = useState<'symbol' | 'price' | 'change' | 'volume'>('symbol');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [productTypeFilter, setProductTypeFilter] = useState<string>('all');
+  const [displayLimit, setDisplayLimit] = useState(20);
   const [isClient, setIsClient] = useState(false);
 
   // Handle client-side hydration to prevent mismatch
@@ -183,32 +197,74 @@ export function LivePriceFeeds({ theme, autoRefresh, refreshInterval }: LivePric
     setIsClient(true);
   }, []);
 
-  const symbols = ['BTC-USD', 'ETH-USD', 'ADA-USD', 'SOL-USD'];
+  // Auto-connect when component mounts
+  useEffect(() => {
+    if (!marketData.isConnected && marketData.products.length > 0) {
+      // Subscribe to top perpetual futures by default
+      const topSymbols = marketData.products
+        .filter(p => p.productType === 'perpetual_futures')
+        .slice(0, 20)
+        .map(p => p.symbol);
 
-  // Sort symbols based on current sort criteria
-  const sortedSymbols = [...symbols].sort((a, b) => {
-    const aData = marketData[a];
-    const bData = marketData[b];
-    
-    if (!aData || !bData) return 0;
-    
-    let comparison = 0;
-    switch (sortBy) {
-      case 'symbol':
-        comparison = a.localeCompare(b);
-        break;
-      case 'price':
-        comparison = aData.price - bData.price;
-        break;
-      case 'change':
-        comparison = aData.changePercent - bData.changePercent;
-        break;
+      if (topSymbols.length > 0) {
+        marketData.subscribe(topSymbols);
+      }
     }
-    
-    return sortOrder === 'asc' ? comparison : -comparison;
-  });
+  }, [marketData.products, marketData.isConnected, marketData]);
 
-  const handleSort = (criteria: 'symbol' | 'price' | 'change') => {
+  // Filter and sort products
+  const filteredProducts = useMemo(() => {
+    let filtered = marketData.products;
+
+    // Filter by search term
+    if (searchTerm) {
+      filtered = filtered.filter(product =>
+        product.symbol.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        product.underlyingAsset.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        product.description.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    // Filter by product type
+    if (productTypeFilter !== 'all') {
+      filtered = filtered.filter(product => product.productType === productTypeFilter);
+    }
+
+    return filtered;
+  }, [marketData.products, searchTerm, productTypeFilter]);
+
+  // Sort products with market data
+  const sortedProducts = useMemo(() => {
+    return [...filteredProducts].sort((a, b) => {
+      const aData = marketData.marketData.get(a.symbol);
+      const bData = marketData.marketData.get(b.symbol);
+
+      let comparison = 0;
+      switch (sortBy) {
+        case 'symbol':
+          comparison = a.symbol.localeCompare(b.symbol);
+          break;
+        case 'price':
+          if (!aData || !bData) return 0;
+          comparison = aData.price - bData.price;
+          break;
+        case 'change':
+          if (!aData || !bData) return 0;
+          comparison = aData.changePercent - bData.changePercent;
+          break;
+        case 'volume':
+          if (!aData || !bData) return 0;
+          comparison = aData.volume - bData.volume;
+          break;
+        default:
+          comparison = a.symbol.localeCompare(b.symbol);
+      }
+
+      return sortOrder === 'asc' ? comparison : -comparison;
+    }).slice(0, displayLimit);
+  }, [filteredProducts, marketData.marketData, sortBy, sortOrder, displayLimit]);
+
+  const handleSort = (criteria: 'symbol' | 'price' | 'change' | 'volume') => {
     if (sortBy === criteria) {
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
     } else {
@@ -217,122 +273,295 @@ export function LivePriceFeeds({ theme, autoRefresh, refreshInterval }: LivePric
     }
   };
 
+  const handleSubscribeToMore = () => {
+    const unsubscribedProducts = filteredProducts.filter(product =>
+      !marketData.subscribedSymbols.includes(product.symbol)
+    ).slice(0, 10);
+
+    if (unsubscribedProducts.length > 0) {
+      marketData.subscribe(unsubscribedProducts.map(p => p.symbol));
+    }
+  };
+
   return (
-    <div className="space-y-4">
-      {/* Header Controls */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-2">
-          <h3 className="text-lg font-semibold">Live Price Feeds</h3>
-          <Badge variant={connectionStatus === 'connected' ? 'default' : 'destructive'}>
-            {connectionStatus}
-          </Badge>
-        </div>
-        
-        <div className="flex items-center space-x-2">
-          <span className="text-xs text-gray-500">
-            Last update: {isClient ? new Date(lastUpdate).toLocaleTimeString() : '--:--:--'}
-          </span>
-          
-          {/* Sort Controls */}
-          <div className="flex items-center space-x-1">
+    <Card className={`${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <CardTitle className="text-lg">Live Price Feeds</CardTitle>
+            <Badge variant={marketData.isConnected ? 'default' : 'destructive'} className="flex items-center gap-1">
+              {marketData.isConnected ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
+              {marketData.isConnected ? 'Connected' : 'Disconnected'}
+            </Badge>
+            {marketData.error && (
+              <Badge variant="destructive" className="flex items-center gap-1">
+                <AlertCircle className="w-3 h-3" />
+                Error
+              </Badge>
+            )}
+          </div>
+
+          <div className="flex items-center space-x-2">
             <Button
-              variant={sortBy === 'symbol' ? 'default' : 'ghost'}
+              variant="outline"
               size="sm"
-              onClick={() => handleSort('symbol')}
-              className="text-xs"
+              onClick={marketData.refresh}
+              disabled={marketData.isLoading}
+              className="flex items-center gap-1"
             >
-              Symbol
+              <RefreshCw className={`w-3 h-3 ${marketData.isLoading ? 'animate-spin' : ''}`} />
+              Refresh
             </Button>
             <Button
-              variant={sortBy === 'price' ? 'default' : 'ghost'}
+              variant="outline"
               size="sm"
-              onClick={() => handleSort('price')}
-              className="text-xs"
+              onClick={handleSubscribeToMore}
+              disabled={marketData.isLoading}
             >
-              Price
-            </Button>
-            <Button
-              variant={sortBy === 'change' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => handleSort('change')}
-              className="text-xs"
-            >
-              Change
+              Load More
             </Button>
           </div>
         </div>
-      </div>
 
-      {/* Price Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {sortedSymbols.map((symbol) => (
-          <PriceCard
-            key={symbol}
-            symbol={symbol}
-            data={marketData[symbol]}
-            theme={theme}
-            onClick={() => setSelectedSymbol(selectedSymbol === symbol ? null : symbol)}
-            isSelected={selectedSymbol === symbol}
-          />
-        ))}
-      </div>
+        {/* Search and Filter Controls */}
+        <div className="flex items-center space-x-2 mt-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
+            <Input
+              placeholder="Search symbols, assets, or descriptions..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-8"
+            />
+          </div>
 
-      {/* Selected Symbol Details */}
-      {selectedSymbol && marketData[selectedSymbol] && (
-        <Card className={`${
-          theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
-        }`}>
-          <CardContent className="p-6">
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h4 className="text-xl font-semibold">
-                  {selectedSymbol.replace('-', '/')} Details
-                </h4>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setSelectedSymbol(null)}
-                >
-                  ×
-                </Button>
-              </div>
-              
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="space-y-1">
-                  <span className="text-sm text-gray-500">Current Price</span>
-                  <div className="text-lg font-semibold">
-                    ${isClient ? marketData[selectedSymbol].price.toLocaleString() : marketData[selectedSymbol].price.toFixed(2)}
-                  </div>
-                </div>
-                
-                <div className="space-y-1">
-                  <span className="text-sm text-gray-500">24h Change</span>
-                  <div className={`text-lg font-semibold ${
-                    marketData[selectedSymbol].change >= 0 ? 'text-green-500' : 'text-red-500'
-                  }`}>
-                    {marketData[selectedSymbol].change >= 0 ? '+' : ''}
-                    {marketData[selectedSymbol].changePercent.toFixed(2)}%
-                  </div>
-                </div>
-                
-                <div className="space-y-1">
-                  <span className="text-sm text-gray-500">24h Volume</span>
-                  <div className="text-lg font-semibold">
-                    {(marketData[selectedSymbol].volume / 1000000).toFixed(2)}M
-                  </div>
-                </div>
-                
-                <div className="space-y-1">
-                  <span className="text-sm text-gray-500">Last Update</span>
-                  <div className="text-lg font-semibold">
-                    {isClient ? new Date(marketData[selectedSymbol].timestamp).toLocaleTimeString() : '--:--:--'}
-                  </div>
-                </div>
-              </div>
+          <Select value={productTypeFilter} onValueChange={setProductTypeFilter}>
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="Filter by type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Types</SelectItem>
+              <SelectItem value="perpetual_futures">Perpetual Futures</SelectItem>
+              <SelectItem value="futures">Futures</SelectItem>
+              <SelectItem value="call_options">Call Options</SelectItem>
+              <SelectItem value="put_options">Put Options</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={displayLimit.toString()} onValueChange={(value) => setDisplayLimit(parseInt(value))}>
+            <SelectTrigger className="w-20">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="10">10</SelectItem>
+              <SelectItem value="20">20</SelectItem>
+              <SelectItem value="50">50</SelectItem>
+              <SelectItem value="100">100</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Sort Controls */}
+        <div className="flex items-center justify-between mt-3">
+          <div className="flex items-center space-x-1">
+            <Filter className="w-4 h-4 text-gray-400" />
+            <span className="text-sm text-gray-500">Sort by:</span>
+            {(['symbol', 'price', 'change', 'volume'] as const).map((criteria) => (
+              <Button
+                key={criteria}
+                variant={sortBy === criteria ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => handleSort(criteria)}
+                className="text-xs capitalize"
+              >
+                {criteria}
+                {sortBy === criteria && (
+                  <span className="ml-1">{sortOrder === 'asc' ? '↑' : '↓'}</span>
+                )}
+              </Button>
+            ))}
+          </div>
+
+          <div className="text-xs text-gray-500">
+            Showing {sortedProducts.length} of {filteredProducts.length} products
+            {marketData.lastUpdate > 0 && (
+              <span className="ml-2">
+                • Last update: {isClient ? new Date(marketData.lastUpdate).toLocaleTimeString() : '--:--:--'}
+              </span>
+            )}
+          </div>
+        </div>
+      </CardHeader>
+
+      <CardContent className="pt-0">
+        {/* Loading State */}
+        {marketData.isLoading && (
+          <div className="flex items-center justify-center py-8">
+            <div className="flex items-center space-x-2">
+              <RefreshCw className="w-4 h-4 animate-spin" />
+              <span>Loading market data...</span>
             </div>
-          </CardContent>
-        </Card>
-      )}
-    </div>
+          </div>
+        )}
+
+        {/* Error State */}
+        {marketData.error && !marketData.isLoading && (
+          <div className="flex items-center justify-center py-8">
+            <div className="text-center space-y-2">
+              <AlertCircle className="w-8 h-8 text-red-500 mx-auto" />
+              <p className="text-red-500">{marketData.error}</p>
+              <Button variant="outline" onClick={marketData.refresh}>
+                Try Again
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Empty State */}
+        {!marketData.isLoading && !marketData.error && sortedProducts.length === 0 && (
+          <div className="flex items-center justify-center py-8">
+            <div className="text-center space-y-2">
+              <Search className="w-8 h-8 text-gray-400 mx-auto" />
+              <p className="text-gray-500">No products found matching your criteria</p>
+              <Button variant="outline" onClick={() => { setSearchTerm(''); setProductTypeFilter('all'); }}>
+                Clear Filters
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Price Cards Grid */}
+        {!marketData.isLoading && sortedProducts.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {sortedProducts.map((product) => {
+              const data = marketData.marketData.get(product.symbol);
+              return (
+                <PriceCard
+                  key={product.symbol}
+                  symbol={product.symbol}
+                  data={data!}
+                  product={product}
+                  theme={theme}
+                  onClick={() => setSelectedSymbol(selectedSymbol === product.symbol ? null : product.symbol)}
+                  isSelected={selectedSymbol === product.symbol}
+                  isLoading={!data}
+                />
+              );
+            })}
+          </div>
+        )}
+
+        {/* Selected Symbol Details */}
+        {selectedSymbol && (
+          <Card className={`mt-4 ${
+            theme === 'dark' ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-300'
+          }`}>
+            <CardContent className="p-6">
+              {(() => {
+                const data = marketData.marketData.get(selectedSymbol);
+                const product = marketData.products.find(p => p.symbol === selectedSymbol);
+
+                if (!data || !product) {
+                  return (
+                    <div className="flex items-center justify-center py-4">
+                      <span className="text-gray-500">Loading details...</span>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="text-xl font-semibold">{selectedSymbol}</h4>
+                        <p className="text-sm text-gray-500">{product.description}</p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setSelectedSymbol(null)}
+                      >
+                        ×
+                      </Button>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="space-y-1">
+                        <span className="text-sm text-gray-500">Current Price</span>
+                        <div className="text-lg font-semibold">
+                          ${isClient ? data.price.toLocaleString() : data.price.toFixed(2)}
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <span className="text-sm text-gray-500">24h Change</span>
+                        <div className={`text-lg font-semibold ${
+                          data.changePercent >= 0 ? 'text-green-500' : 'text-red-500'
+                        }`}>
+                          {data.changePercent >= 0 ? '+' : ''}
+                          {data.changePercent.toFixed(2)}%
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <span className="text-sm text-gray-500">24h Volume</span>
+                        <div className="text-lg font-semibold">
+                          {data.volume > 1000000
+                            ? `${(data.volume / 1000000).toFixed(2)}M`
+                            : `${(data.volume / 1000).toFixed(2)}K`
+                          }
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <span className="text-sm text-gray-500">Bid/Ask</span>
+                        <div className="text-lg font-semibold">
+                          ${data.bid.toFixed(2)} / ${data.ask.toFixed(2)}
+                        </div>
+                      </div>
+
+                      {data.openInterest && (
+                        <div className="space-y-1">
+                          <span className="text-sm text-gray-500">Open Interest</span>
+                          <div className="text-lg font-semibold">
+                            {data.openInterest > 1000000
+                              ? `${(data.openInterest / 1000000).toFixed(2)}M`
+                              : `${(data.openInterest / 1000).toFixed(2)}K`
+                            }
+                          </div>
+                        </div>
+                      )}
+
+                      {data.fundingRate && (
+                        <div className="space-y-1">
+                          <span className="text-sm text-gray-500">Funding Rate</span>
+                          <div className="text-lg font-semibold">
+                            {(data.fundingRate * 100).toFixed(4)}%
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="space-y-1">
+                        <span className="text-sm text-gray-500">Product Type</span>
+                        <div className="text-lg font-semibold capitalize">
+                          {product.productType.replace('_', ' ')}
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <span className="text-sm text-gray-500">Last Update</span>
+                        <div className="text-lg font-semibold">
+                          {isClient ? new Date(data.timestamp).toLocaleTimeString() : '--:--:--'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </CardContent>
+          </Card>
+        )}
+      </CardContent>
+    </Card>
   );
 }

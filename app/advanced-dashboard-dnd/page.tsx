@@ -38,6 +38,9 @@ import { OrderExecution } from '@/components/dashboard/order-execution';
 import { PerformanceCharts } from '@/components/dashboard/performance-charts';
 import { AlertsNotifications } from '@/components/dashboard/alerts-notifications';
 import { QuickActions } from '@/components/dashboard/quick-actions';
+import { MLModelsOverview } from '@/components/dashboard/ml-models-overview';
+import { MLPredictionsFeed } from '@/components/dashboard/ml-predictions-feed';
+import { DeltaConnectionStatus } from '@/components/dashboard/delta-connection-status';
 
 // Types
 interface DashboardWidget {
@@ -106,6 +109,78 @@ const DEFAULT_WIDGETS: DashboardWidget[] = [
     size: 'small',
     category: 'controls',
     priority: 6
+  },
+  {
+    id: 'market-sentiment',
+    title: 'Market Sentiment',
+    component: MarketSentiment,
+    size: 'small',
+    category: 'analytics',
+    priority: 7
+  },
+  {
+    id: 'strategy-performance',
+    title: 'Strategy Performance',
+    component: StrategyPerformance,
+    size: 'medium',
+    category: 'analytics',
+    priority: 8
+  },
+  {
+    id: 'risk-management',
+    title: 'Risk Management',
+    component: RiskManagement,
+    size: 'medium',
+    category: 'monitoring',
+    priority: 9
+  },
+  {
+    id: 'order-execution',
+    title: 'Order Execution',
+    component: OrderExecution,
+    size: 'small',
+    category: 'controls',
+    priority: 10
+  },
+  {
+    id: 'performance-charts',
+    title: 'Performance Charts',
+    component: PerformanceCharts,
+    size: 'large',
+    category: 'analytics',
+    priority: 11
+  },
+  {
+    id: 'alerts',
+    title: 'Alerts & Notifications',
+    component: AlertsNotifications,
+    size: 'small',
+    category: 'monitoring',
+    priority: 12
+  },
+  {
+    id: 'ml-models',
+    title: 'ML Models Overview',
+    component: MLModelsOverview,
+    size: 'medium',
+    category: 'analytics',
+    priority: 13
+  },
+  {
+    id: 'ml-predictions',
+    title: 'ML Predictions Feed',
+    component: MLPredictionsFeed,
+    size: 'medium',
+    category: 'realtime',
+    priority: 14
+  },
+  {
+    id: 'delta-connection',
+    title: 'Delta Exchange Status',
+    component: DeltaConnectionStatus,
+    size: 'small',
+    category: 'monitoring',
+    priority: 15
   }
 ];
 

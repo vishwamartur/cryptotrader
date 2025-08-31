@@ -288,13 +288,15 @@ npm run dev
 
 ### 4. Test the MVP Features
 1. **Main Dashboard**: Visit `http://localhost:3000` for the full trading interface
-2. **Simple Dashboard**: Visit `http://localhost:3000/dashboard` for the MVP demo
-3. **API Testing**: All endpoints are available at `http://localhost:3000/api/*`
+2. **Advanced Dashboard**: Visit `http://localhost:3000/advanced-dashboard` for the comprehensive dashboard
+3. **Drag & Drop Dashboard**: Visit `http://localhost:3000/advanced-dashboard-dnd` for the interactive layout editor
+4. **API Testing**: All endpoints are available at `http://localhost:3000/api/*`
 
 ### 5. Manual Testing Checklist
 - [ ] Application starts without errors (`npm run dev`)
 - [ ] Main page loads with trading interface
-- [ ] Dashboard page shows market data and AI analysis
+- [ ] Advanced dashboard shows market data and AI analysis
+- [ ] Drag & drop dashboard allows widget reordering
 - [ ] API endpoints return proper responses
 - [ ] AI analysis works (with valid API key)
 - [ ] Strategy execution functions correctly
