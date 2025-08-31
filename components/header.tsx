@@ -19,7 +19,7 @@ export function Header() {
           </div>
 
           <div className="flex items-center gap-2">
-            <Link href="/advanced-dashboard">
+            <Link href="/dashboard">
               <Button variant="default" size="sm">
                 <TrendingUp className="h-4 w-4" />
                 Dashboard
@@ -31,10 +31,10 @@ export function Header() {
                 Drag & Drop
               </Button>
             </Link>
-            <Link href="/dashboard">
+            <Link href="/advanced-dashboard">
               <Button variant="outline" size="sm">
                 <BarChart3 className="h-4 w-4" />
-                Legacy
+                Advanced
               </Button>
             </Link>
             <Button variant="ghost" size="sm">
