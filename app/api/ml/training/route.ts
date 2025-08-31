@@ -5,7 +5,7 @@ import { EnsembleModel } from '@/lib/ml/models/ensemble-model';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-export const maxDuration = 900; // up to 15 minutes
+export const maxDuration = 300; // up to 5 minutes (Vercel hobby plan limit)
 import { isMLTrainingEnabled, validateModelConfig } from '@/lib/ml/config/ml-config';
 
 // Get training jobs
