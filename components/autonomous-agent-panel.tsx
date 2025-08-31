@@ -18,7 +18,7 @@ export function AutonomousAgentPanel() {
   const [config, setConfig] = useState<AgentConfig>({
     aiConfig: {
       apiKey: "",
-      model: "claude-3-5-sonnet-20241022",
+      model: "llama-3.1-sonar-large-128k-online",
       riskTolerance: "moderate",
       maxPositionSize: 5,
       stopLossPercentage: 3,

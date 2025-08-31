@@ -175,7 +175,7 @@ A comprehensive, production-ready AI-powered cryptocurrency trading platform tha
 ### Prerequisites
 - Node.js 18+ and npm/yarn
 - Delta Exchange account with API credentials
-- Claude API key for AI features
+- Perplexity API key for AI features
 
 ### Environment Variables
 \`\`\`env
@@ -183,8 +183,8 @@ A comprehensive, production-ready AI-powered cryptocurrency trading platform tha
 DELTA_EXCHANGE_API_KEY=your_api_key
 DELTA_EXCHANGE_API_SECRET=your_api_secret
 
-# Claude AI API
-ANTHROPIC_API_KEY=your_claude_api_key
+# Perplexity AI API
+PERPLEXITY_API_KEY=your_perplexity_api_key
 
 # WebSocket URLs
 NEXT_PUBLIC_DELTA_WS_URL=wss://socket.india.delta.exchange
@@ -270,8 +270,8 @@ cp .env.example .env.local
 Edit `.env.local` with your API keys:
 
 ```env
-# Required for AI features (get from https://console.anthropic.com/)
-ANTHROPIC_API_KEY=sk-ant-your-api-key-here
+# Required for AI features (get from https://www.perplexity.ai/settings/api)
+PERPLEXITY_API_KEY=pplx-your-api-key-here
 
 # Optional: Set to true for demo mode with mock data
 NEXT_PUBLIC_DEMO_MODE=true
@@ -337,10 +337,10 @@ import { AITradingEngine } from './lib/ai-trading-engine'
 import { RiskManager } from './lib/risk-management'
 
 const aiEngine = new AITradingEngine({
-  model: 'claude-3-5-sonnet-20241022',
+  model: 'llama-3.1-sonar-large-128k-online',
   maxTokens: 4096,
   temperature: 0.1,
-  systemPrompt: 'Advanced crypto trading analysis'
+  systemPrompt: 'Advanced crypto trading analysis with real-time market data'
 })
 
 // Analyze market and get AI trading decision
@@ -353,7 +353,7 @@ console.log(\`AI Signal: \${analysis.signal} (Confidence: \${analysis.confidence
 import { AutonomousAgent } from './lib/autonomous-agent'
 
 const agent = new AutonomousAgent({
-  aiConfig: { model: 'claude-3-5-sonnet-20241022', maxTokens: 4096 },
+  aiConfig: { model: 'llama-3.1-sonar-large-128k-online', maxTokens: 4096 },
   riskLimits: { maxPositionSize: 1000, maxDailyLoss: 500 },
   enabledStrategies: { ai: true, quant: true, hft: false, rl: true, defi: true },
   analysisInterval: 5, // 5 minutes

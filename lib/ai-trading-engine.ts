@@ -40,29 +40,31 @@ export class AITradingEngine {
     this.isAnalyzing = true
 
     try {
-      // Use Anthropic API directly
-      const apiKey = this.config.apiKey || process.env.ANTHROPIC_API_KEY;
+      // Use Perplexity API directly
+      const apiKey = this.config.apiKey || process.env.PERPLEXITY_API_KEY;
 
       if (!apiKey) {
-        console.warn('No Anthropic API key provided, returning default analysis');
+        console.warn('No Perplexity API key provided, returning default analysis');
         return this.getDefaultAnalysis(marketData[0]?.price || 45000);
       }
 
       const analysisPrompt = this.buildAnalysisPrompt(marketData, currentPositions, portfolioBalance);
 
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
+      const response = await fetch('https://api.perplexity.ai/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01'
+          'Authorization': `Bearer ${apiKey}`
         },
         body: JSON.stringify({
-          model: this.config.model || 'claude-3-5-sonnet-20241022',
+          model: this.config.model || 'llama-3.1-sonar-large-128k-online',
           max_tokens: this.config.maxTokens || 4096,
           temperature: this.config.temperature || 0.1,
-          system: this.config.systemPrompt || 'You are an expert cryptocurrency trading analyst.',
           messages: [
+            {
+              role: 'system',
+              content: this.config.systemPrompt || 'You are an expert cryptocurrency trading analyst with access to real-time market data and news. Provide detailed market analysis and trading recommendations based on current market conditions.'
+            },
             {
               role: 'user',
               content: analysisPrompt
@@ -72,11 +74,11 @@ export class AITradingEngine {
       });
 
       if (!response || !response.ok) {
-        throw new Error(`Anthropic API failed: ${response?.statusText || 'Network error'}`);
+        throw new Error(`Perplexity API failed: ${response?.statusText || 'Network error'}`);
       }
 
       const result = await response.json();
-      const analysisText = result.content?.[0]?.text || '';
+      const analysisText = result.choices?.[0]?.message?.content || '';
 
       // Parse the AI response
       return this.parseAIResponse(analysisText, marketData[0]?.price || 45000);

@@ -22,7 +22,7 @@ npm install --legacy-peer-deps
 
 # 2. Setup environment
 cp .env.example .env.local
-# Edit .env.local with your Anthropic API key (optional for demo)
+# Edit .env.local with your Perplexity API key (optional for demo)
 
 # 3. Start the application
 npm run dev

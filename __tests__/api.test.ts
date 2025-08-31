@@ -22,7 +22,7 @@ describe('API Integration Tests', () => {
   beforeAll(() => {
     // Set up test environment
     process.env.NODE_ENV = 'test';
-    process.env.ANTHROPIC_API_KEY = 'test-api-key';
+    process.env.PERPLEXITY_API_KEY = 'test-api-key';
   });
 
   afterAll(() => {

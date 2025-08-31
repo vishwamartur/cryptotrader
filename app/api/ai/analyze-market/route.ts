@@ -5,20 +5,24 @@ export async function POST(request: NextRequest) {
     const { prompt, config, marketData, positions, balance } = await request.json()
 
     if (!config.apiKey) {
-      return NextResponse.json({ error: "Claude API key is required" }, { status: 400 })
+      return NextResponse.json({ error: "Perplexity API key is required" }, { status: 400 })
     }
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    const response = await fetch("https://api.perplexity.ai/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": config.apiKey,
-        "anthropic-version": "2023-06-01",
+        "Authorization": `Bearer ${config.apiKey}`,
       },
       body: JSON.stringify({
-        model: config.model || "claude-3-5-sonnet-20241022",
+        model: config.model || "llama-3.1-sonar-large-128k-online",
         max_tokens: 1000,
+        temperature: 0.1,
         messages: [
+          {
+            role: "system",
+            content: "You are an expert cryptocurrency trading analyst with access to real-time market data and news. Provide detailed market analysis and trading recommendations."
+          },
           {
             role: "user",
             content: prompt,
@@ -29,12 +33,12 @@ export async function POST(request: NextRequest) {
 
     if (!response.ok) {
       const errorData = await response.text()
-      console.error("Claude API error:", errorData)
-      return NextResponse.json({ error: `Claude API error: ${response.statusText}` }, { status: response.status })
+      console.error("Perplexity API error:", errorData)
+      return NextResponse.json({ error: `Perplexity API error: ${response.statusText}` }, { status: response.status })
     }
 
-    const claudeResponse = await response.json()
-    const content = claudeResponse.content[0].text
+    const perplexityResponse = await response.json()
+    const content = perplexityResponse.choices?.[0]?.message?.content || ''
 
     try {
       const analysis = JSON.parse(content)
@@ -51,7 +55,7 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json(enhancedAnalysis)
     } catch (parseError) {
-      console.error("Failed to parse Claude response:", parseError)
+      console.error("Failed to parse Perplexity response:", parseError)
       return NextResponse.json({ error: "Invalid AI response format" }, { status: 500 })
     }
   } catch (error) {

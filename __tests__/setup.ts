@@ -69,7 +69,7 @@ beforeAll(() => {
 
   // Set up environment variables for testing
   process.env.NODE_ENV = 'test';
-  process.env.ANTHROPIC_API_KEY = 'test-api-key';
+  process.env.PERPLEXITY_API_KEY = 'test-api-key';
   
   // Mock fetch for API calls
   (global as any).fetch = jest.fn(() =>

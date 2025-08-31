@@ -46,7 +46,7 @@ npm run dev
 #### 1. AI Trading Engine (`lib/ai-trading-engine.ts`)
 - **Status**: ✅ COMPLETE
 - **API Endpoint**: `POST /api/ai/analyze`
-- **Features**: Claude 3.5 Sonnet integration, market analysis, confidence scoring
+- **Features**: Perplexity AI integration, market analysis, confidence scoring
 - **Tests**: 95%+ coverage
 
 #### 2. Risk Management System (`lib/risk-management.ts`)
@@ -396,7 +396,7 @@ npm run health-check
 #### 1. API Key Errors
 ```bash
 # Check environment variables
-echo $ANTHROPIC_API_KEY
+echo $PERPLEXITY_API_KEY
 
 # Verify API key format
 # Should start with 'sk-ant-'

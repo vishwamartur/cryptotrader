@@ -6,8 +6,8 @@ Successfully implemented a comprehensive AI-powered cryptocurrency trading platf
 ## ✅ Completed Features
 
 ### 1. AI Trading Engine (`lib/ai-trading-engine.ts`)
-- **Claude 3.5 Sonnet Integration**: Advanced AI analysis using Anthropic's latest model
-- **Intelligent Market Analysis**: Real-time market sentiment and technical analysis
+- **Perplexity AI Integration**: Advanced AI analysis using Perplexity's latest model with real-time data access
+- **Intelligent Market Analysis**: Real-time market sentiment and technical analysis with current news
 - **Risk-Aware Decision Making**: AI considers risk metrics in trading decisions
 - **Confidence Scoring**: Each trading signal includes confidence levels
 - **Multi-timeframe Analysis**: Supports various trading timeframes

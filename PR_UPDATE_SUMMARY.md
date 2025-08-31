@@ -30,7 +30,7 @@
 ## 🚀 **New Features Implemented**
 
 ### **🧠 AI Trading Engine**
-- **Claude 3.5 Sonnet Integration**: Direct API integration with fallback analysis
+- **Perplexity AI Integration**: Direct API integration with real-time data and fallback analysis
 - **Confidence Scoring**: AI-powered trading recommendations with confidence levels
 - **Risk-Aware Analysis**: Position sizing and risk management integration
 - **Error Handling**: Graceful fallbacks when API is unavailable

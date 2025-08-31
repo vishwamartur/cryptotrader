@@ -31,7 +31,7 @@ export class EnhancedAIEngine {
   private apiKey: string
   private model: string
 
-  constructor(apiKey: string, model = "claude-3-5-sonnet-20241022") {
+  constructor(apiKey: string, model = "llama-3.1-sonar-large-128k-online") {
     this.apiKey = apiKey
     this.model = model
   }
