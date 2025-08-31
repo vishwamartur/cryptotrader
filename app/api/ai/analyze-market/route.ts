@@ -11,7 +11,15 @@ export async function POST(request: NextRequest) {
 
     // add an AbortController to enforce a bounded timeout
     const controller = new AbortController()
-    const timeoutMs = Math.min(Math.max(config?.timeoutMs ?? 20_000, 1_000), 60_000)
+    // Robust timeout validation: ensure user input cannot exhaust resources
+    const DEFAULT_TIMEOUT_MS = 20_000
+    const MIN_TIMEOUT_MS = 1_000
+    const MAX_TIMEOUT_MS = 60_000
+    let timeoutMs = DEFAULT_TIMEOUT_MS
+    if (typeof config?.timeoutMs === "number" && Number.isFinite(config.timeoutMs)) {
+      timeoutMs = Math.min(Math.max(config.timeoutMs, MIN_TIMEOUT_MS), MAX_TIMEOUT_MS)
+    }
+    // Disallow other types/invalid input explicitly
     const timer = setTimeout(() => controller.abort(), timeoutMs)
 
     const response = await fetch("https://api.perplexity.ai/chat/completions", {
