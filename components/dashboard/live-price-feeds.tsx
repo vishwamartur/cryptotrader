@@ -66,7 +66,8 @@ function PriceCard({ symbol, data, theme, onClick, isSelected }: PriceCardProps)
   const formatPrice = (price: number) => {
     if (price < 1) return price.toFixed(4);
     if (price < 100) return price.toFixed(2);
-    return price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    // Use toFixed instead of toLocaleString to prevent hydration mismatch
+    return price.toFixed(2);
   };
 
   return (
@@ -175,6 +176,12 @@ export function LivePriceFeeds({ theme, autoRefresh, refreshInterval }: LivePric
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'symbol' | 'price' | 'change'>('symbol');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [isClient, setIsClient] = useState(false);
+
+  // Handle client-side hydration to prevent mismatch
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   const symbols = ['BTC-USD', 'ETH-USD', 'ADA-USD', 'SOL-USD'];
 
@@ -223,7 +230,7 @@ export function LivePriceFeeds({ theme, autoRefresh, refreshInterval }: LivePric
         
         <div className="flex items-center space-x-2">
           <span className="text-xs text-gray-500">
-            Last update: {new Date(lastUpdate).toLocaleTimeString()}
+            Last update: {isClient ? new Date(lastUpdate).toLocaleTimeString() : '--:--:--'}
           </span>
           
           {/* Sort Controls */}
@@ -294,7 +301,7 @@ export function LivePriceFeeds({ theme, autoRefresh, refreshInterval }: LivePric
                 <div className="space-y-1">
                   <span className="text-sm text-gray-500">Current Price</span>
                   <div className="text-lg font-semibold">
-                    ${marketData[selectedSymbol].price.toLocaleString()}
+                    ${isClient ? marketData[selectedSymbol].price.toLocaleString() : marketData[selectedSymbol].price.toFixed(2)}
                   </div>
                 </div>
                 
@@ -318,7 +325,7 @@ export function LivePriceFeeds({ theme, autoRefresh, refreshInterval }: LivePric
                 <div className="space-y-1">
                   <span className="text-sm text-gray-500">Last Update</span>
                   <div className="text-lg font-semibold">
-                    {new Date(marketData[selectedSymbol].timestamp).toLocaleTimeString()}
+                    {isClient ? new Date(marketData[selectedSymbol].timestamp).toLocaleTimeString() : '--:--:--'}
                   </div>
                 </div>
               </div>

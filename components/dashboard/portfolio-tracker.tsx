@@ -159,6 +159,12 @@ export function PortfolioTracker({ theme, autoRefresh, refreshInterval }: Portfo
   const { portfolio, connectionStatus, lastUpdate } = useRealtimeData();
   const [showValues, setShowValues] = useState(true);
   const [timeframe, setTimeframe] = useState<'1D' | '7D' | '30D'>('1D');
+  const [isClient, setIsClient] = useState(false);
+
+  // Handle client-side hydration to prevent mismatch
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   // Calculate additional metrics
   const calculateMetrics = () => {
@@ -189,10 +195,11 @@ export function PortfolioTracker({ theme, autoRefresh, refreshInterval }: Portfo
 
   const formatValue = (value: number, hideValue = false) => {
     if (hideValue) return '••••••';
-    return value.toLocaleString(undefined, { 
-      minimumFractionDigits: 2, 
-      maximumFractionDigits: 2 
-    });
+    // Use toFixed instead of toLocaleString to prevent hydration mismatch
+    return isClient ? value.toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }) : value.toFixed(2);
   };
 
   if (!portfolio) {
