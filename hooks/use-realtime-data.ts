@@ -105,62 +105,83 @@ export function useRealtimeData() {
   const reconnectAttemptsRef = useRef(0);
   const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Mock data generators for demo purposes
-  const generateMockMarketData = useCallback((symbol: string): MarketData => {
-    const basePrice = {
-      'BTC-USD': 45000,
-      'ETH-USD': 3000,
-      'ADA-USD': 0.5,
-      'SOL-USD': 100
-    }[symbol] || 1000;
+  // Fetch live market data from Delta Exchange API
+  const fetchLiveMarketData = useCallback(async (symbol: string): Promise<MarketData | null> => {
+    try {
+      const response = await fetch(`/api/market/realtime/${symbol}`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch data for ${symbol}`);
+      }
 
-    const change = (Math.random() - 0.5) * basePrice * 0.02;
-    const price = basePrice + change;
-    
-    return {
-      symbol,
-      price,
-      change,
-      changePercent: (change / basePrice) * 100,
-      volume: Math.random() * 1000000,
-      high24h: price * (1 + Math.random() * 0.05),
-      low24h: price * (1 - Math.random() * 0.05),
-      bid: price - (Math.random() * 10),
-      ask: price + (Math.random() * 10),
-      timestamp: Date.now()
-    };
+      const result = await response.json();
+      if (result.success && result.data) {
+        return {
+          symbol: result.data.symbol,
+          price: result.data.price,
+          change: result.data.change,
+          changePercent: result.data.changePercent,
+          volume: result.data.volume,
+          high24h: result.data.high24h,
+          low24h: result.data.low24h,
+          bid: result.data.bid,
+          ask: result.data.ask,
+          timestamp: result.data.lastUpdated || Date.now()
+        };
+      }
+      return null;
+    } catch (error) {
+      console.error(`Error fetching market data for ${symbol}:`, error);
+      return null;
+    }
   }, []);
 
-  const generateMockPortfolio = useCallback((): PortfolioData => {
-    const positions: Position[] = SYMBOLS.slice(0, 3).map(symbol => {
-      const entryPrice = Math.random() * 1000;
-      const currentPrice = entryPrice + (Math.random() - 0.5) * entryPrice * 0.1;
-      const size = Math.random() * 10;
-      const unrealizedPnL = (currentPrice - entryPrice) * size;
-      
+  // Fetch live portfolio data from Delta Exchange API
+  const fetchLivePortfolioData = useCallback(async (): Promise<PortfolioData | null> => {
+    try {
+      // Fetch balance and positions in parallel
+      const [balanceResponse, positionsResponse] = await Promise.all([
+        fetch('/api/portfolio/balance'),
+        fetch('/api/portfolio/positions')
+      ]);
+
+      if (!balanceResponse.ok || !positionsResponse.ok) {
+        throw new Error('Failed to fetch portfolio data');
+      }
+
+      const balanceData = await balanceResponse.json();
+      const positionsData = await positionsResponse.json();
+
+      if (!balanceData.success || !positionsData.success) {
+        throw new Error('API returned error response');
+      }
+
+      // Transform Delta Exchange positions to our format
+      const positions: Position[] = (positionsData.positions || []).map((pos: any) => ({
+        symbol: pos.product?.symbol || 'UNKNOWN',
+        size: parseFloat(pos.size || '0'),
+        entryPrice: parseFloat(pos.entry_price || '0'),
+        currentPrice: parseFloat(pos.mark_price || pos.entry_price || '0'),
+        unrealizedPnL: parseFloat(pos.unrealized_pnl || '0'),
+        unrealizedPnLPercent: parseFloat(pos.unrealized_pnl_percent || '0'),
+        side: pos.size > 0 ? 'long' : 'short',
+        timestamp: Date.now()
+      }));
+
+      const totalBalance = parseFloat(balanceData.summary?.totalBalance || '0');
+      const totalPnL = parseFloat(balanceData.summary?.totalUnrealizedPnL || '0');
+
       return {
-        symbol,
-        size,
-        entryPrice,
-        currentPrice,
-        unrealizedPnL,
-        unrealizedPnLPercent: (unrealizedPnL / (entryPrice * size)) * 100,
-        side: Math.random() > 0.5 ? 'long' : 'short',
+        totalValue: totalBalance,
+        totalPnL: totalPnL,
+        dailyPnL: totalPnL * 0.3, // Estimate daily P&L (would need historical data for accuracy)
+        positions,
+        balance: totalBalance,
         timestamp: Date.now()
       };
-    });
-
-    const totalValue = positions.reduce((sum, pos) => sum + pos.currentPrice * pos.size, 10000);
-    const totalPnL = positions.reduce((sum, pos) => sum + pos.unrealizedPnL, 0);
-
-    return {
-      totalValue,
-      totalPnL,
-      dailyPnL: totalPnL * 0.3, // Mock daily P&L
-      positions,
-      balance: 10000,
-      timestamp: Date.now()
-    };
+    } catch (error) {
+      console.error('Error fetching portfolio data:', error);
+      return null;
+    }
   }, []);
 
   const generateMockAISignal = useCallback((): AISignal => {
@@ -193,28 +214,41 @@ export function useRealtimeData() {
       const simulateWebSocket = () => {
         setState(prev => ({ ...prev, connectionStatus: 'connected' }));
         
-        // Update market data every second
-        const marketInterval = setInterval(() => {
+        // Update market data every 2 seconds with live data
+        const marketInterval = setInterval(async () => {
           const newMarketData: Record<string, MarketData> = {};
-          SYMBOLS.forEach(symbol => {
-            newMarketData[symbol] = generateMockMarketData(symbol);
-          });
-          
-          setState(prev => ({
-            ...prev,
-            marketData: newMarketData,
-            lastUpdate: Date.now()
-          }));
-        }, 1000);
 
-        // Update portfolio every 5 seconds
-        const portfolioInterval = setInterval(() => {
-          setState(prev => ({
-            ...prev,
-            portfolio: generateMockPortfolio(),
-            lastUpdate: Date.now()
-          }));
-        }, 5000);
+          // Fetch live data for all symbols
+          const marketPromises = SYMBOLS.map(async (symbol) => {
+            const data = await fetchLiveMarketData(symbol);
+            if (data) {
+              newMarketData[symbol] = data;
+            }
+          });
+
+          await Promise.all(marketPromises);
+
+          // Only update if we have data
+          if (Object.keys(newMarketData).length > 0) {
+            setState(prev => ({
+              ...prev,
+              marketData: { ...prev.marketData, ...newMarketData },
+              lastUpdate: Date.now()
+            }));
+          }
+        }, 2000);
+
+        // Update portfolio every 10 seconds with live data
+        const portfolioInterval = setInterval(async () => {
+          const portfolioData = await fetchLivePortfolioData();
+          if (portfolioData) {
+            setState(prev => ({
+              ...prev,
+              portfolio: portfolioData,
+              lastUpdate: Date.now()
+            }));
+          }
+        }, 10000);
 
         // Generate AI signals every 30 seconds
         const aiInterval = setInterval(() => {
@@ -260,7 +294,7 @@ export function useRealtimeData() {
       setState(prev => ({ ...prev, connectionStatus: 'disconnected' }));
       scheduleReconnect();
     }
-  }, [generateMockMarketData, generateMockPortfolio, generateMockAISignal]);
+  }, [fetchLiveMarketData, fetchLivePortfolioData, generateMockAISignal]);
 
   const disconnect = useCallback(() => {
     if (wsRef.current?.cleanup) {
@@ -309,16 +343,29 @@ export function useRealtimeData() {
   // API methods
   const refreshData = useCallback(async () => {
     try {
-      // In a real implementation, this would fetch fresh data from APIs
+      // Fetch fresh data from live APIs
+      const [portfolioData, ...marketDataResults] = await Promise.all([
+        fetchLivePortfolioData(),
+        ...SYMBOLS.map(symbol => fetchLiveMarketData(symbol))
+      ]);
+
+      const newMarketData: Record<string, MarketData> = {};
+      marketDataResults.forEach((data, index) => {
+        if (data) {
+          newMarketData[SYMBOLS[index]] = data;
+        }
+      });
+
       setState(prev => ({
         ...prev,
-        portfolio: generateMockPortfolio(),
+        ...(portfolioData && { portfolio: portfolioData }),
+        ...(Object.keys(newMarketData).length > 0 && { marketData: { ...prev.marketData, ...newMarketData } }),
         lastUpdate: Date.now()
       }));
     } catch (error) {
       console.error('Failed to refresh data:', error);
     }
-  }, [generateMockPortfolio]);
+  }, [fetchLivePortfolioData, fetchLiveMarketData]);
 
   const executeOrder = useCallback(async (order: Partial<OrderExecution>) => {
     const newOrder: OrderExecution = {

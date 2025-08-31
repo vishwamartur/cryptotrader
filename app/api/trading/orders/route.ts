@@ -1,18 +1,18 @@
 import { NextResponse } from "next/server"
-import { createDeltaExchangeAPI } from "@/lib/delta-exchange"
+import { createDeltaExchangeAPIFromEnv } from "@/lib/delta-exchange"
 
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { product_id, size, side, order_type, limit_price, api_key, api_secret } = body
+    const { product_id, size, side, order_type, limit_price } = body
 
     // Validate required fields
-    if (!product_id || !size || !side || !order_type || !api_key || !api_secret) {
-      return NextResponse.json({ success: false, error: "Missing required fields" }, { status: 400 })
+    if (!product_id || !size || !side || !order_type) {
+      return NextResponse.json({ success: false, error: "Missing required fields: product_id, size, side, order_type" }, { status: 400 })
     }
 
-    // Create Delta Exchange API instance
-    const deltaAPI = createDeltaExchangeAPI(api_key, api_secret)
+    // Create Delta Exchange API instance using environment credentials
+    const deltaAPI = createDeltaExchangeAPIFromEnv()
 
     // Prepare order data
     const orderData = {
@@ -43,17 +43,10 @@ export async function POST(request: Request) {
   }
 }
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
-    const { searchParams } = new URL(request.url)
-    const api_key = searchParams.get("api_key")
-    const api_secret = searchParams.get("api_secret")
-
-    if (!api_key || !api_secret) {
-      return NextResponse.json({ success: false, error: "API credentials required" }, { status: 400 })
-    }
-
-    const deltaAPI = createDeltaExchangeAPI(api_key, api_secret)
+    // Use environment credentials for authenticated API calls
+    const deltaAPI = createDeltaExchangeAPIFromEnv()
     const orders = await deltaAPI.getOrders()
 
     return NextResponse.json({
