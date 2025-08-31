@@ -3,10 +3,10 @@ import { AITradingEngine } from '@/lib/ai-trading-engine';
 
 // Initialize AI Trading Engine
 const aiEngine = new AITradingEngine({
-  model: 'claude-3-5-sonnet-20241022',
+  model: 'llama-3.1-sonar-large-128k-online',
   maxTokens: 4096,
   temperature: 0.1,
-  systemPrompt: 'You are an expert cryptocurrency trading analyst. Provide detailed market analysis and trading recommendations.'
+  systemPrompt: 'You are an expert cryptocurrency trading analyst with access to real-time market data and news. Provide detailed market analysis and trading recommendations based on current market conditions.'
 });
 
 export async function POST(request: NextRequest) {

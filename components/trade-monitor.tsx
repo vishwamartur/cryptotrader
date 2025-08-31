@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -14,6 +14,12 @@ import type { Trade, TradeAlert } from "@/lib/trade-monitor"
 export function TradeMonitor() {
   const { trades, alerts, metrics, timeframe, updateTimeframe } = useTradeMonitor()
   const [selectedTab, setSelectedTab] = useState("trades")
+  const [isClient, setIsClient] = useState(false)
+
+  // Handle client-side hydration to prevent mismatch
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
 
   const getStatusIcon = (status: Trade["status"]) => {
     switch (status) {
@@ -130,9 +136,9 @@ export function TradeMonitor() {
                           </div>
                         )}
                         <div className="text-sm text-muted-foreground">
-                          {trade.executedAt
+                          {isClient ? (trade.executedAt
                             ? trade.executedAt.toLocaleTimeString()
-                            : trade.timestamp.toLocaleTimeString()}
+                            : trade.timestamp.toLocaleTimeString()) : '--:--:--'}
                         </div>
                       </div>
                     </div>

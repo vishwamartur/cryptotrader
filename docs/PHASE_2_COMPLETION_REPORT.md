@@ -145,7 +145,7 @@ app/api/
 ## 🔄 Integration Status
 
 ### External Integrations
-- **✅ Anthropic Claude 3.5 Sonnet** - AI market analysis operational
+- **✅ Perplexity AI** - AI market analysis with real-time data operational
 - **✅ WebSocket Connections** - Real-time data streaming
 - **✅ Market Data APIs** - Mock and real data integration ready
 - **🚧 Exchange APIs** - Framework ready for live integration

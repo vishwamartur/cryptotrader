@@ -48,6 +48,12 @@ export function MLPredictionsFeed({
   const [error, setError] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const [selectedSymbol, setSelectedSymbol] = useState<string>('all');
+  const [isClient, setIsClient] = useState(false);
+
+  // Handle client-side hydration to prevent mismatch
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   // Fetch ML predictions
   const fetchPredictions = async () => {
@@ -335,7 +341,7 @@ export function MLPredictionsFeed({
 
         {/* Last Update */}
         <div className="text-xs text-gray-500 text-center">
-          Last updated: {lastUpdate.toLocaleTimeString()}
+          Last updated: {isClient ? lastUpdate.toLocaleTimeString() : '--:--:--'}
         </div>
       </CardContent>
     </Card>

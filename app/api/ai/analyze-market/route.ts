@@ -4,37 +4,62 @@ export async function POST(request: NextRequest) {
   try {
     const { prompt, config, marketData, positions, balance } = await request.json()
 
-    if (!config.apiKey) {
-      return NextResponse.json({ error: "Claude API key is required" }, { status: 400 })
+    const apiKey = config?.apiKey || process.env.PERPLEXITY_API_KEY
+    if (!apiKey) {
+      return NextResponse.json({ error: "Perplexity API key is required" }, { status: 400 })
     }
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    // add an AbortController to enforce a bounded timeout
+    const controller = new AbortController()
+    // Robust timeout validation: ensure user input cannot exhaust resources
+    const DEFAULT_TIMEOUT_MS = 20_000
+    const MIN_TIMEOUT_MS = 1_000
+    const MAX_TIMEOUT_MS = 60_000
+    let timeoutMs = DEFAULT_TIMEOUT_MS
+    if (typeof config?.timeoutMs === "number" && Number.isFinite(config.timeoutMs)) {
+      timeoutMs = Math.min(Math.max(config.timeoutMs, MIN_TIMEOUT_MS), MAX_TIMEOUT_MS)
+    }
+    // Disallow other types/invalid input explicitly
+    const timer = setTimeout(() => controller.abort(), timeoutMs)
+
+    const response = await fetch("https://api.perplexity.ai/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": config.apiKey,
-        "anthropic-version": "2023-06-01",
+        "Authorization": `Bearer ${apiKey}`,
+        "Accept": "application/json",
       },
+      signal: controller.signal,
       body: JSON.stringify({
-        model: config.model || "claude-3-5-sonnet-20241022",
-        max_tokens: 1000,
+        model: config.model || "llama-3.1-sonar-large-128k-online",
+        max_tokens: config?.maxTokens ?? 1000,
+        temperature: config?.temperature ?? 0.1,
         messages: [
+          {
+            role: "system",
+            content: "You are an expert cryptocurrency trading analyst with access to real-time market data and news. Provide detailed market analysis and trading recommendations. IMPORTANT: Respond ONLY with minified JSON matching this schema: {\"signal\":\"BUY\"|\"SELL\"|\"HOLD\",\"confidence\":number,\"rationale\":string,\"timeframe\":string,\"targets\":number[],\"stops\":number[]}. No markdown or code fences."
+          },
           {
             role: "user",
             content: prompt,
           },
+          {
+            role: "user",
+            content: JSON.stringify({ marketData, positions, balance })
+          },
         ],
       }),
     })
+    clearTimeout(timer)
 
     if (!response.ok) {
       const errorData = await response.text()
-      console.error("Claude API error:", errorData)
-      return NextResponse.json({ error: `Claude API error: ${response.statusText}` }, { status: response.status })
+      console.error("Perplexity API error:", errorData)
+      return NextResponse.json({ error: `Perplexity API error: ${response.statusText}` }, { status: response.status })
     }
 
-    const claudeResponse = await response.json()
-    const content = claudeResponse.content[0].text
+    const perplexityResponse = await response.json()
+    const content = perplexityResponse.choices?.[0]?.message?.content || ''
 
     try {
       const analysis = JSON.parse(content)
@@ -51,7 +76,7 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json(enhancedAnalysis)
     } catch (parseError) {
-      console.error("Failed to parse Claude response:", parseError)
+      console.error("Failed to parse Perplexity response:", parseError)
       return NextResponse.json({ error: "Invalid AI response format" }, { status: 500 })
     }
   } catch (error) {

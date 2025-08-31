@@ -184,6 +184,12 @@ export function AITradingSignals({ theme, autoRefresh, refreshInterval }: AITrad
   const [filter, setFilter] = useState<'ALL' | 'BUY' | 'SELL' | 'HOLD'>('ALL');
   const [sortBy, setSortBy] = useState<'time' | 'confidence' | 'symbol'>('time');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isClient, setIsClient] = useState(false);
+
+  // Handle client-side hydration to prevent mismatch
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   // Filter and sort signals
   const filteredSignals = aiSignals
@@ -378,7 +384,7 @@ export function AITradingSignals({ theme, autoRefresh, refreshInterval }: AITrad
 
       {/* Last Update */}
       <div className="text-xs text-gray-500 text-center">
-        Last updated: {new Date(lastUpdate).toLocaleString()}
+        Last updated: {isClient ? new Date(lastUpdate).toLocaleString() : '--:--:--'}
       </div>
     </div>
   );

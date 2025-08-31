@@ -22,7 +22,7 @@ describe('API Integration Tests', () => {
   beforeAll(() => {
     // Set up test environment
     process.env.NODE_ENV = 'test';
-    process.env.ANTHROPIC_API_KEY = 'test-api-key';
+    process.env.PERPLEXITY_API_KEY = 'test-api-key';
   });
 
   afterAll(() => {
@@ -67,7 +67,7 @@ describe('API Integration Tests', () => {
 
       expect(result.error).toBe(true);
       expect(result.code).toBe('VALIDATION_ERROR');
-      expect(response.status).toHaveBeenCalledWith(400);
+      expect(response.status).toBe(400);
     });
 
     test('should handle missing required fields', async () => {

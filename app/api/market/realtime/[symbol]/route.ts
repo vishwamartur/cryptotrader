@@ -5,14 +5,44 @@ import { createDeltaExchangeAPIFromEnv } from '@/lib/delta-exchange';
 const SYMBOL_MAPPING: Record<string, string> = {
   'BTC-USD': 'BTCUSDT',
   'ETH-USD': 'ETHUSDT',
+  'SOL-USD': 'SOLUSDT',
   'ADA-USD': 'ADAUSDT',
+  'MATIC-USD': 'MATICUSDT',
+  'DOT-USD': 'DOTUSDT',
+  'AVAX-USD': 'AVAXUSDT',
+  'LINK-USD': 'LINKUSDT',
+  'UNI-USD': 'UNIUSDT',
+  'ATOM-USD': 'ATOMUSDT',
   'BTC-USDT': 'BTCUSDT',
   'ETH-USDT': 'ETHUSDT',
+  'SOL-USDT': 'SOLUSDT',
   'ADA-USDT': 'ADAUSDT',
+  'MATIC-USDT': 'MATICUSDT',
+  'DOT-USDT': 'DOTUSDT',
+  'AVAX-USDT': 'AVAXUSDT',
+  'LINK-USDT': 'LINKUSDT',
+  'UNI-USDT': 'UNIUSDT',
+  'ATOM-USDT': 'ATOMUSDT',
   'BTCUSDT': 'BTCUSDT',
   'ETHUSDT': 'ETHUSDT',
-  'ADAUSDT': 'ADAUSDT'
+  'SOLUSDT': 'SOLUSDT',
+  'ADAUSDT': 'ADAUSDT',
+  'MATICUSDT': 'MATICUSDT',
+  'DOTUSDT': 'DOTUSDT',
+  'AVAXUSDT': 'AVAXUSDT',
+  'LINKUSDT': 'LINKUSDT',
+  'UNIUSDT': 'UNIUSDT',
+  'ATOMUSDT': 'ATOMUSDT'
 };
+
+function toCanonicalUsdSymbol(sym: string): string {
+  const s = sym.toUpperCase();
+  const delta = SYMBOL_MAPPING[s] ?? s;
+  for (const [k, v] of Object.entries(SYMBOL_MAPPING)) {
+    if (k.endsWith('-USD') && v === delta) return k;
+  }
+  return s;
+}
 
 export async function GET(
   request: NextRequest,
@@ -54,26 +84,31 @@ export async function GET(
     // Create Delta Exchange API instance
     const deltaAPI = createDeltaExchangeAPIFromEnv();
 
-    // Get live ticker data from Delta Exchange
-    const tickerData = await deltaAPI.getTicker(deltaSymbol);
+    // Get live ticker data from Delta Exchange with fallback
+    let tickerData;
+    let ticker;
+    let isUsingFallback = false;
 
-    if (!tickerData.success || !tickerData.result) {
-      return NextResponse.json(
-        {
-          error: true,
-          message: `Failed to fetch ticker data for ${deltaSymbol}`,
-          code: 'TICKER_FETCH_ERROR'
-        },
-        { status: 500 }
-      );
+    try {
+      tickerData = await deltaAPI.getTicker(deltaSymbol);
+
+      if (!tickerData.success || !tickerData.result) {
+        throw new Error(`Failed to fetch ticker data for ${deltaSymbol}`);
+      }
+
+      ticker = tickerData.result;
+    } catch (tickerError) {
+      console.warn(`Delta Exchange API failed for ${deltaSymbol}, using fallback data:`, tickerError);
+
+      // Use fallback mock data when Delta Exchange API is not available
+      ticker = generateFallbackTickerData(toCanonicalUsdSymbol(inputSymbol));
+      isUsingFallback = true;
     }
 
-    const ticker = tickerData.result;
-
-    // Transform Delta Exchange data to our format
+    // Transform ticker data to our format
     const marketData = {
       symbol: inputSymbol,
-      price: parseFloat(ticker.close || ticker.mark_price || '0'),
+      price: parseFloat(ticker.close || ticker.mark_price || ticker.price || '0'),
       bid: parseFloat(ticker.bid || '0'),
       ask: parseFloat(ticker.ask || '0'),
       volume: parseFloat(ticker.volume || '0'),
@@ -83,7 +118,8 @@ export async function GET(
       changePercent: parseFloat(ticker.change_percent || '0'),
       lastUpdated: Date.now(),
       deltaSymbol: deltaSymbol,
-      source: 'delta_exchange'
+      source: isUsingFallback ? 'fallback_data' : 'delta_exchange',
+      isLiveData: !isUsingFallback
     };
 
     // Add order book data if requested
@@ -121,27 +157,110 @@ export async function GET(
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
     if (errorMessage.includes('credentials not found')) {
+      // Return fallback data instead of error when credentials are missing
+      console.warn('Delta Exchange credentials not found, returning fallback data');
+
+      const fallbackTicker = generateFallbackTickerData(toCanonicalUsdSymbol(params.symbol.toUpperCase()));
+      const fallbackData = {
+        symbol: params.symbol.toUpperCase(),
+        price: parseFloat(fallbackTicker.price),
+        bid: parseFloat(fallbackTicker.bid),
+        ask: parseFloat(fallbackTicker.ask),
+        volume: parseFloat(fallbackTicker.volume),
+        high24h: parseFloat(fallbackTicker.high),
+        low24h: parseFloat(fallbackTicker.low),
+        change: parseFloat(fallbackTicker.change),
+        changePercent: parseFloat(fallbackTicker.change_percent),
+        lastUpdated: Date.now(),
+        deltaSymbol: SYMBOL_MAPPING[params.symbol.toUpperCase()] || params.symbol.toUpperCase(),
+        source: 'fallback_data',
+        isLiveData: false
+      };
+
+      return NextResponse.json({
+        success: true,
+        data: fallbackData,
+        timestamp: Date.now(),
+        warning: 'Using fallback data - Delta Exchange API credentials not configured'
+      });
+    }
+
+    // For other errors, also try to return fallback data
+    console.warn('Delta Exchange API error, attempting fallback data:', errorMessage);
+
+    try {
+      const fallbackTicker = generateFallbackTickerData(toCanonicalUsdSymbol(params.symbol.toUpperCase()));
+      const fallbackData = {
+        symbol: params.symbol.toUpperCase(),
+        price: parseFloat(fallbackTicker.price),
+        bid: parseFloat(fallbackTicker.bid),
+        ask: parseFloat(fallbackTicker.ask),
+        volume: parseFloat(fallbackTicker.volume),
+        high24h: parseFloat(fallbackTicker.high),
+        low24h: parseFloat(fallbackTicker.low),
+        change: parseFloat(fallbackTicker.change),
+        changePercent: parseFloat(fallbackTicker.change_percent),
+        lastUpdated: Date.now(),
+        deltaSymbol: SYMBOL_MAPPING[params.symbol.toUpperCase()] || params.symbol.toUpperCase(),
+        source: 'fallback_data',
+        isLiveData: false
+      };
+
+      return NextResponse.json({
+        success: true,
+        data: fallbackData,
+        timestamp: Date.now(),
+        warning: `Using fallback data - Delta Exchange API error: ${errorMessage}`
+      });
+    } catch (fallbackError) {
+      // If even fallback fails, return error
       return NextResponse.json(
         {
           error: true,
-          message: 'Delta Exchange API credentials not configured',
-          code: 'MISSING_CREDENTIALS',
-          details: 'Please configure DELTA_API_KEY and DELTA_API_SECRET'
+          message: 'Failed to fetch market data and fallback generation failed',
+          code: 'COMPLETE_FAILURE',
+          details: errorMessage
         },
         { status: 500 }
       );
     }
-
-    return NextResponse.json(
-      {
-        error: true,
-        message: 'Failed to fetch live market data from Delta Exchange',
-        code: 'DELTA_API_ERROR',
-        details: errorMessage
-      },
-      { status: 500 }
-    );
   }
+}
+
+// Helper function to generate fallback ticker data when Delta Exchange API is unavailable
+function generateFallbackTickerData(symbol: string) {
+  // Base prices for different cryptocurrencies (approximate values)
+  const basePrices: Record<string, number> = {
+    'BTC-USD': 43000,
+    'ETH-USD': 2600,
+    'SOL-USD': 95,
+    'ADA-USD': 0.45,
+    'MATIC-USD': 0.85,
+    'DOT-USD': 7.2,
+    'AVAX-USD': 38,
+    'LINK-USD': 14.5,
+    'UNI-USD': 6.8,
+    'ATOM-USD': 9.5
+  };
+
+  const basePrice = basePrices[symbol] || 100; // Default to $100 if symbol not found
+  const priceVariation = 0.02; // 2% price variation
+  const currentPrice = basePrice * (1 + (Math.random() - 0.5) * priceVariation);
+  const changePercent = (Math.random() - 0.5) * 10; // -5% to +5% change
+  const change = currentPrice * (changePercent / 100);
+
+  return {
+    close: currentPrice.toString(),
+    price: currentPrice.toString(),
+    mark_price: currentPrice.toString(),
+    bid: (currentPrice * 0.999).toString(),
+    ask: (currentPrice * 1.001).toString(),
+    volume: (Math.random() * 1000000 + 100000).toString(),
+    high: (currentPrice * 1.03).toString(),
+    low: (currentPrice * 0.97).toString(),
+    change: change.toString(),
+    change_percent: changePercent.toString()
+  };
 }
 
 // Helper function to generate technical indicators from price data

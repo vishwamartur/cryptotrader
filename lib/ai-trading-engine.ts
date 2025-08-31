@@ -15,13 +15,15 @@ export interface AITradingConfig {
 
 export interface MarketAnalysis {
   signal: "BUY" | "SELL" | "HOLD"
-  confidence: number
+  confidence: number // 0–100
   reasoning: string
   entryPrice: number
   stopLoss: number
   takeProfit: number
   positionSize: number
   riskReward: number
+  symbol?: string
+  timestamp?: number
 }
 
 export class AITradingEngine {
@@ -40,29 +42,31 @@ export class AITradingEngine {
     this.isAnalyzing = true
 
     try {
-      // Use Anthropic API directly
-      const apiKey = this.config.apiKey || process.env.ANTHROPIC_API_KEY;
+      // Use Perplexity API directly
+      const apiKey = this.config.apiKey || process.env.PERPLEXITY_API_KEY;
 
       if (!apiKey) {
-        console.warn('No Anthropic API key provided, returning default analysis');
+        console.warn('No Perplexity API key provided, returning default analysis');
         return this.getDefaultAnalysis(marketData[0]?.price || 45000);
       }
 
       const analysisPrompt = this.buildAnalysisPrompt(marketData, currentPositions, portfolioBalance);
 
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
+      const response = await fetch('https://api.perplexity.ai/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01'
+          'Authorization': `Bearer ${apiKey}`
         },
         body: JSON.stringify({
-          model: this.config.model || 'claude-3-5-sonnet-20241022',
+          model: this.config.model || 'llama-3.1-sonar-large-128k-online',
           max_tokens: this.config.maxTokens || 4096,
           temperature: this.config.temperature || 0.1,
-          system: this.config.systemPrompt || 'You are an expert cryptocurrency trading analyst.',
           messages: [
+            {
+              role: 'system',
+              content: this.config.systemPrompt || 'You are an expert cryptocurrency trading analyst with access to real-time market data and news. Provide detailed market analysis and trading recommendations based on current market conditions.'
+            },
             {
               role: 'user',
               content: analysisPrompt
@@ -72,11 +76,11 @@ export class AITradingEngine {
       });
 
       if (!response || !response.ok) {
-        throw new Error(`Anthropic API failed: ${response?.statusText || 'Network error'}`);
+        throw new Error(`Perplexity API failed: ${response?.statusText || 'Network error'}`);
       }
 
       const result = await response.json();
-      const analysisText = result.content?.[0]?.text || '';
+      const analysisText = result.choices?.[0]?.message?.content || '';
 
       // Parse the AI response
       return this.parseAIResponse(analysisText, marketData[0]?.price || 45000);
@@ -200,7 +204,7 @@ Respond with a JSON object containing:
         const parsed = JSON.parse(jsonMatch[0]);
         return {
           signal: parsed.signal || 'HOLD',
-          confidence: Math.max(0, Math.min(1, parsed.confidence || 0.5)),
+          confidence: Math.max(0, Math.min(100, parsed.confidence ?? 50)),
           reasoning: parsed.reasoning || analysisText.substring(0, 200),
           positionSize: Math.max(0, parsed.positionSize || 100),
           entryPrice: parsed.entryPrice || currentPrice,
@@ -217,14 +221,14 @@ Respond with a JSON object containing:
     // Fallback: analyze text for sentiment
     const text = analysisText.toLowerCase();
     let signal: 'BUY' | 'SELL' | 'HOLD' = 'HOLD';
-    let confidence = 0.5;
+    let confidence = 50;
 
     if (text.includes('buy') || text.includes('bullish') || text.includes('positive')) {
       signal = 'BUY';
-      confidence = 0.7;
+      confidence = 70;
     } else if (text.includes('sell') || text.includes('bearish') || text.includes('negative')) {
       signal = 'SELL';
-      confidence = 0.7;
+      confidence = 70;
     }
 
     return {
@@ -243,7 +247,7 @@ Respond with a JSON object containing:
   private getDefaultAnalysis(currentPrice: number): MarketAnalysis {
     return {
       signal: 'HOLD',
-      confidence: 0.5,
+      confidence: 50,
       reasoning: 'Default analysis - insufficient data or API unavailable',
       positionSize: 100,
       entryPrice: currentPrice,

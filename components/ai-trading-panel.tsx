@@ -35,7 +35,7 @@ export function AITradingPanel() {
 
     const aiConfig = {
       apiKey: apiKey.trim(),
-      model: "claude-3-5-sonnet-20241022",
+      model: "llama-3.1-sonar-large-128k-online",
       riskTolerance,
       maxPositionSize,
       stopLossPercentage,
@@ -112,11 +112,11 @@ export function AITradingPanel() {
         {showConfig && (
           <div className="space-y-4 p-4 border rounded-lg">
             <div className="space-y-2">
-              <Label htmlFor="api-key">Claude API Key</Label>
+              <Label htmlFor="api-key">Perplexity API Key</Label>
               <Input
                 id="api-key"
                 type="password"
-                placeholder="sk-ant-..."
+                placeholder="pplx-..."
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
               />
@@ -216,7 +216,9 @@ export function AITradingPanel() {
                     {getSignalIcon(analysis.signal)}
                     <Badge className={getSignalColor(analysis.signal)}>{analysis.signal}</Badge>
                   </div>
-                  <Badge variant="outline">{analysis.confidence}% confidence</Badge>
+                  <Badge variant="outline">
+                    {(analysis.confidence > 1 ? analysis.confidence : Math.round(analysis.confidence * 100))}% confidence
+                  </Badge>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 text-sm">

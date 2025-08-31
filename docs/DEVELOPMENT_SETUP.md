@@ -96,8 +96,8 @@ cp .env.example .env.local
 
 #### Environment Variables
 ```env
-# Anthropic API (Required for AI features)
-ANTHROPIC_API_KEY=your_anthropic_api_key_here
+# Perplexity API (Required for AI features)
+PERPLEXITY_API_KEY=your_perplexity_api_key_here
 
 # Delta Exchange API (Optional - for live trading)
 NEXT_PUBLIC_DELTA_API_KEY=your_delta_api_key

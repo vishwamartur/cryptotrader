@@ -31,7 +31,7 @@ export class EnhancedAIEngine {
   private apiKey: string
   private model: string
 
-  constructor(apiKey: string, model = "claude-3-5-sonnet-20241022") {
+  constructor(apiKey: string, model = "llama-3.1-sonar-large-128k-online") {
     this.apiKey = apiKey
     this.model = model
   }
@@ -154,19 +154,24 @@ export class EnhancedAIEngine {
     if (volumes.length < 2) {
       return { trend: "INCREASING" as const, strength: 0.5 }
     }
-
-    const recentVolume = volumes.slice(-5).reduce((sum, v) => sum + v, 0) / 5
-    const olderVolume = volumes.slice(-10, -5).reduce((sum, v) => sum + v, 0) / 5
-
-    const trend = recentVolume > olderVolume ? "INCREASING" : "DECREASING"
-    const strength = Math.min(1, Math.abs(recentVolume - olderVolume) / olderVolume)
-
+    const recent = volumes.slice(-5)
+    const older = volumes.slice(-10, -5)
+    const recentAvg = recent.length ? recent.reduce((s, v) => s + v, 0) / recent.length : 0
+    const olderAvg = older.length ? older.reduce((s, v) => s + v, 0) / older.length : recentAvg
+    const trend = recentAvg >= olderAvg ? "INCREASING" : "DECREASING"
+    const denom = olderAvg === 0 ? Math.max(1, recentAvg) : olderAvg
+    const strength = Math.min(1, Math.abs(recentAvg - olderAvg) / denom)
     return { trend, strength }
   }
 
   private async analyzeMarketSentiment(marketData: MarketData[]) {
-    const priceChanges = marketData.map((d) => d.change24h)
-    const avgChange = priceChanges.reduce((sum, change) => sum + change, 0) / priceChanges.length
+    if (!marketData.length) {
+      return { score: 0, sources: ["Insufficient Data"], confidence: 0.3 }
+    }
+    const priceChanges = marketData.map((d) =>
+      typeof (d as any).change24h === "number" ? (d as any).change24h : 0
+    )
+    const avgChange = priceChanges.reduce((sum, change) => sum + change, 0) / (priceChanges.length || 1)
 
     // Normalize to -1 to 1 scale
     const score = Math.max(-1, Math.min(1, avgChange / 10))
