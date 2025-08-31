@@ -20,21 +20,15 @@ export function Header() {
 
           <div className="flex items-center gap-2">
             <Button asChild variant="default" size="sm">
-              <Link href="/dashboard">
+              <Link href="/advanced-dashboard">
                 <TrendingUp className="h-4 w-4" />
                 Dashboard
               </Link>
             </Button>
-            <Button asChild variant="ghost" size="sm">
+            <Button asChild variant="outline" size="sm">
               <Link href="/advanced-dashboard-dnd">
                 <Move className="h-4 w-4" />
                 Drag & Drop
-              </Link>
-            </Button>
-            <Button asChild variant="outline" size="sm">
-              <Link href="/advanced-dashboard">
-                <BarChart3 className="h-4 w-4" />
-                Advanced
               </Link>
             </Button>
             <Button variant="ghost" size="sm">
