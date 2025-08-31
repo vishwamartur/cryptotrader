@@ -15,13 +15,15 @@ export interface AITradingConfig {
 
 export interface MarketAnalysis {
   signal: "BUY" | "SELL" | "HOLD"
-  confidence: number
+  confidence: number // 0–100
   reasoning: string
   entryPrice: number
   stopLoss: number
   takeProfit: number
   positionSize: number
   riskReward: number
+  symbol?: string
+  timestamp?: number
 }
 
 export class AITradingEngine {
@@ -202,7 +204,7 @@ Respond with a JSON object containing:
         const parsed = JSON.parse(jsonMatch[0]);
         return {
           signal: parsed.signal || 'HOLD',
-          confidence: Math.max(0, Math.min(1, parsed.confidence || 0.5)),
+          confidence: Math.max(0, Math.min(100, parsed.confidence ?? 50)),
           reasoning: parsed.reasoning || analysisText.substring(0, 200),
           positionSize: Math.max(0, parsed.positionSize || 100),
           entryPrice: parsed.entryPrice || currentPrice,
@@ -219,14 +221,14 @@ Respond with a JSON object containing:
     // Fallback: analyze text for sentiment
     const text = analysisText.toLowerCase();
     let signal: 'BUY' | 'SELL' | 'HOLD' = 'HOLD';
-    let confidence = 0.5;
+    let confidence = 50;
 
     if (text.includes('buy') || text.includes('bullish') || text.includes('positive')) {
       signal = 'BUY';
-      confidence = 0.7;
+      confidence = 70;
     } else if (text.includes('sell') || text.includes('bearish') || text.includes('negative')) {
       signal = 'SELL';
-      confidence = 0.7;
+      confidence = 70;
     }
 
     return {
@@ -245,7 +247,7 @@ Respond with a JSON object containing:
   private getDefaultAnalysis(currentPrice: number): MarketAnalysis {
     return {
       signal: 'HOLD',
-      confidence: 0.5,
+      confidence: 50,
       reasoning: 'Default analysis - insufficient data or API unavailable',
       positionSize: 100,
       entryPrice: currentPrice,

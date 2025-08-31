@@ -45,6 +45,12 @@ export function MLModelsOverview({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
+  const [isClient, setIsClient] = useState(false);
+
+  // Handle client-side hydration to prevent mismatch
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   // Fetch ML models data
   const fetchModels = async () => {
@@ -275,7 +281,7 @@ export function MLModelsOverview({
 
                 {/* Last Trained */}
                 <div className="text-xs text-gray-500">
-                  Last trained: {model.lastTrainedAt ? new Date(model.lastTrainedAt).toLocaleString() : 'Never'}
+                  Last trained: {model.lastTrainedAt ? (isClient ? new Date(model.lastTrainedAt).toLocaleString() : '--:--:--') : 'Never'}
                 </div>
               </div>
             ))
@@ -291,7 +297,7 @@ export function MLModelsOverview({
 
         {/* Last Update */}
         <div className="text-xs text-gray-500 text-center">
-          Last updated: {lastUpdate.toLocaleTimeString()}
+          Last updated: {isClient ? lastUpdate.toLocaleTimeString() : '--:--:--'}
         </div>
       </CardContent>
     </Card>

@@ -216,7 +216,9 @@ export function AITradingPanel() {
                     {getSignalIcon(analysis.signal)}
                     <Badge className={getSignalColor(analysis.signal)}>{analysis.signal}</Badge>
                   </div>
-                  <Badge variant="outline">{analysis.confidence}% confidence</Badge>
+                  <Badge variant="outline">
+                    {(analysis.confidence > 1 ? analysis.confidence : Math.round(analysis.confidence * 100))}% confidence
+                  </Badge>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 text-sm">

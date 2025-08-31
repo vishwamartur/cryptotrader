@@ -76,20 +76,26 @@ beforeAll(() => {
     Promise.resolve({
       ok: true,
       json: () => Promise.resolve({
-        content: [{
-          text: JSON.stringify({
-            signal: 'HOLD',
-            confidence: 0.5,
-            reasoning: 'Test reasoning',
-            positionSize: 100,
-            entryPrice: 45000,
-            stopLoss: 44000,
-            takeProfit: 46000,
-            riskReward: 1.0
-          })
+        id: 'cmpl-test',
+        choices: [{
+          message: {
+            role: 'assistant',
+            content: JSON.stringify({
+              signal: 'HOLD',
+              confidence: 50,
+              reasoning: 'Test reasoning',
+              positionSize: 100,
+              entryPrice: 45000,
+              stopLoss: 44000,
+              takeProfit: 46000,
+              riskReward: 1.0
+            })
+          }
         }]
       }),
-      text: () => Promise.resolve('{"signal": "HOLD", "confidence": 0.5}')
+      text: () => Promise.resolve(JSON.stringify({
+        choices: [{ message: { content: '{"signal":"HOLD","confidence":50}' } }]
+      }))
     })
   );
 });

@@ -35,6 +35,15 @@ const SYMBOL_MAPPING: Record<string, string> = {
   'ATOMUSDT': 'ATOMUSDT'
 };
 
+function toCanonicalUsdSymbol(sym: string): string {
+  const s = sym.toUpperCase();
+  const delta = SYMBOL_MAPPING[s] ?? s;
+  for (const [k, v] of Object.entries(SYMBOL_MAPPING)) {
+    if (k.endsWith('-USD') && v === delta) return k;
+  }
+  return s;
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: { symbol: string } }
@@ -92,7 +101,7 @@ export async function GET(
       console.warn(`Delta Exchange API failed for ${deltaSymbol}, using fallback data:`, tickerError);
 
       // Use fallback mock data when Delta Exchange API is not available
-      ticker = generateFallbackTickerData(inputSymbol);
+      ticker = generateFallbackTickerData(toCanonicalUsdSymbol(inputSymbol));
       isUsingFallback = true;
     }
 
@@ -151,7 +160,7 @@ export async function GET(
       // Return fallback data instead of error when credentials are missing
       console.warn('Delta Exchange credentials not found, returning fallback data');
 
-      const fallbackTicker = generateFallbackTickerData(params.symbol.toUpperCase());
+      const fallbackTicker = generateFallbackTickerData(toCanonicalUsdSymbol(params.symbol.toUpperCase()));
       const fallbackData = {
         symbol: params.symbol.toUpperCase(),
         price: parseFloat(fallbackTicker.price),
@@ -180,7 +189,7 @@ export async function GET(
     console.warn('Delta Exchange API error, attempting fallback data:', errorMessage);
 
     try {
-      const fallbackTicker = generateFallbackTickerData(params.symbol.toUpperCase());
+      const fallbackTicker = generateFallbackTickerData(toCanonicalUsdSymbol(params.symbol.toUpperCase()));
       const fallbackData = {
         symbol: params.symbol.toUpperCase(),
         price: parseFloat(fallbackTicker.price),

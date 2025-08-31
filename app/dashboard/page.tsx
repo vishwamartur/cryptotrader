@@ -185,6 +185,20 @@ export default function DashboardPage() {
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [refreshInterval, setRefreshInterval] = useState(30); // seconds
 
+  // Alerts state for Alerts & Notifications widget
+  type Alert = {
+    id: string;
+    type: 'success' | 'warning' | 'error' | 'info';
+    title: string;
+    message: string;
+    timestamp: number;
+    dismissed?: boolean;
+  };
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const dismissAlert = useCallback((id: string) => {
+    setAlerts(prev => prev.map(a => (a.id === id ? { ...a, dismissed: true } : a)));
+  }, []);
+
   // Theme management
   useEffect(() => {
     if (isDarkMode) {
@@ -214,6 +228,8 @@ export default function DashboardPage() {
 
     window.addEventListener('online', checkConnection);
     window.addEventListener('offline', checkConnection);
+    // Initialize connection status on mount
+    checkConnection();
 
     return () => {
       window.removeEventListener('online', checkConnection);
@@ -236,13 +252,22 @@ export default function DashboardPage() {
   }, []);
 
   const toggleFullscreen = useCallback(() => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen();
-      setIsFullscreen(true);
-    } else {
-      document.exitFullscreen();
-      setIsFullscreen(false);
+    try {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen();
+      } else {
+        document.exitFullscreen();
+      }
+    } catch (e) {
+      // no-op; some browsers can throw
     }
+  }, []);
+
+  // Sync fullscreen state with actual fullscreen status
+  useEffect(() => {
+    const onFs = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener('fullscreenchange', onFs);
+    return () => document.removeEventListener('fullscreenchange', onFs);
   }, []);
 
   const exportDashboard = useCallback(() => {
@@ -429,7 +454,20 @@ export default function DashboardPage() {
                     </div>
                   </CardHeader>
                   <CardContent className="pt-0 h-full">
-                    <WidgetComponent />
+                    {widget.id === 'alerts' ? (
+                      <AlertsNotifications
+                        theme={isDarkMode ? 'dark' : 'light'}
+                        alerts={alerts}
+                        onDismiss={dismissAlert}
+                      />
+                    ) : (
+                      <WidgetComponent
+                        theme={isDarkMode ? 'dark' : 'light'}
+                        autoRefresh={autoRefresh}
+                        // child widgets expect ms; page slider is seconds
+                        refreshInterval={refreshInterval * 1000}
+                      />
+                    )}
                   </CardContent>
                 </Card>
               </div>

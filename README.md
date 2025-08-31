@@ -42,7 +42,7 @@ A comprehensive, production-ready AI-powered cryptocurrency trading platform tha
 - **Performance Monitoring** - Real-time system health and performance tracking
 - **Strategy Adaptation** - Dynamic strategy allocation based on market conditions
 ### 🤖 AI Trading Engine
-- **Claude 3.5 Sonnet Integration** - Advanced AI-powered market analysis and autonomous trading decisions
+- **Perplexity AI Integration** - Advanced AI-powered market analysis with real-time data access and autonomous trading decisions
 - **Multi-timeframe Analysis** - Technical indicators across multiple timeframes for comprehensive market assessment
 - **Sentiment Analysis** - Real-time market sentiment evaluation for enhanced decision-making
 - **Backtesting Engine** - Historical strategy validation with performance metrics
@@ -152,7 +152,7 @@ A comprehensive, production-ready AI-powered cryptocurrency trading platform tha
 ## 🏗️ Technical Architecture
 
 ### Frontend
-- **Next.js 14** - React framework with App Router
+- **Next.js 15** - React framework with App Router
 - **TypeScript** - Type-safe development
 - **Tailwind CSS** - Utility-first styling
 - **GSAP** - Professional animations
@@ -272,6 +272,7 @@ Edit `.env.local` with your API keys:
 ```env
 # Required for AI features (get from https://www.perplexity.ai/settings/api)
 PERPLEXITY_API_KEY=pplx-your-api-key-here
+# Do NOT commit this file. Ensure .env*, .env.local are in .gitignore.
 
 # Optional: Set to true for demo mode with mock data
 NEXT_PUBLIC_DEMO_MODE=true

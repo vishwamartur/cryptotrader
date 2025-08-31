@@ -4,32 +4,45 @@ export async function POST(request: NextRequest) {
   try {
     const { prompt, config, marketData, positions, balance } = await request.json()
 
-    if (!config.apiKey) {
+    const apiKey = config?.apiKey || process.env.PERPLEXITY_API_KEY
+    if (!apiKey) {
       return NextResponse.json({ error: "Perplexity API key is required" }, { status: 400 })
     }
+
+    // add an AbortController to enforce a bounded timeout
+    const controller = new AbortController()
+    const timeoutMs = Math.min(Math.max(config?.timeoutMs ?? 20_000, 1_000), 60_000)
+    const timer = setTimeout(() => controller.abort(), timeoutMs)
 
     const response = await fetch("https://api.perplexity.ai/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${config.apiKey}`,
+        "Authorization": `Bearer ${apiKey}`,
+        "Accept": "application/json",
       },
+      signal: controller.signal,
       body: JSON.stringify({
         model: config.model || "llama-3.1-sonar-large-128k-online",
-        max_tokens: 1000,
-        temperature: 0.1,
+        max_tokens: config?.maxTokens ?? 1000,
+        temperature: config?.temperature ?? 0.1,
         messages: [
           {
             role: "system",
-            content: "You are an expert cryptocurrency trading analyst with access to real-time market data and news. Provide detailed market analysis and trading recommendations."
+            content: "You are an expert cryptocurrency trading analyst with access to real-time market data and news. Provide detailed market analysis and trading recommendations. IMPORTANT: Respond ONLY with minified JSON matching this schema: {\"signal\":\"BUY\"|\"SELL\"|\"HOLD\",\"confidence\":number,\"rationale\":string,\"timeframe\":string,\"targets\":number[],\"stops\":number[]}. No markdown or code fences."
           },
           {
             role: "user",
             content: prompt,
           },
+          {
+            role: "user",
+            content: JSON.stringify({ marketData, positions, balance })
+          },
         ],
       }),
     })
+    clearTimeout(timer)
 
     if (!response.ok) {
       const errorData = await response.text()
