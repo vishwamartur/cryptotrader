@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { MLModelService } from '@/lib/ml/services/ml-model-service';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 // Get ML models
 export async function GET(request: NextRequest) {
   try {
@@ -13,9 +16,9 @@ export async function GET(request: NextRequest) {
     if (type) {
       models = await MLModelService.getModelsByType(type, activeOnly);
     } else {
-      models = activeOnly 
+      models = activeOnly
         ? await MLModelService.getActiveModels()
-        : await MLModelService.getActiveModels(); // For now, always return active
+        : await MLModelService.getAllModels();
     }
 
     return NextResponse.json({

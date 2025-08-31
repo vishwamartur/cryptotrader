@@ -209,11 +209,30 @@ interface MLTradingSignal {
 }
 ```
 
-### **Kelly Criterion Position Sizing**
+### **Kelly Criterion Position Sizing (Conservative Implementation)**
 ```typescript
+// Validate inputs to prevent dangerous over-leveraging
+const winProbability = Math.max(0.01, Math.min(0.99, confidence)); // Bound between 1% and 99%
+const winLossRatio = Math.max(0.1, takeProfitPercent / stopLossPercent); // Minimum 0.1 ratio
+
 const kellyFraction = (winLossRatio * winProbability - lossProbability) / winLossRatio;
-const positionSize = Math.min(kellyFraction * maxPosition, maxPosition);
+
+// Apply conservative bounds (max 10% of portfolio, not 25%)
+const maxKelly = 0.1; // Never risk more than 10% of portfolio
+const minKelly = 0.001; // Minimum 0.1% position
+const cappedKelly = Math.max(minKelly, Math.min(kellyFraction, maxKelly));
+
+// Safety check: if Kelly suggests negative position, use minimum
+const safeKelly = kellyFraction <= 0 ? minKelly : cappedKelly;
+const positionSize = Math.min(safeKelly * maxPosition, maxPosition);
 ```
+
+**Safety Features:**
+- Input validation prevents invalid confidence values
+- Conservative 10% maximum position size (vs typical 25%)
+- Minimum position size prevents zero positions
+- Negative Kelly fraction protection
+- Bounds checking on all calculations
 
 ### **Risk Management**
 - **Dynamic Stop Loss**: ML-predicted volatility based

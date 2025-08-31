@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { MLModelService } from '@/lib/ml/services/ml-model-service';
 import { LSTMModel } from '@/lib/ml/models/lstm-model';
 import { EnsembleModel } from '@/lib/ml/models/ensemble-model';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+export const maxDuration = 900; // up to 15 minutes
 import { isMLTrainingEnabled, validateModelConfig } from '@/lib/ml/config/ml-config';
 
 // Get training jobs
@@ -10,7 +14,8 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const modelId = searchParams.get('modelId');
     const status = searchParams.get('status');
-    const limit = parseInt(searchParams.get('limit') || '10');
+    const limitRaw = Number(searchParams.get('limit'));
+    const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(1, limitRaw), 100) : 10;
 
     let trainingJobs;
 
@@ -20,7 +25,7 @@ export async function GET(request: NextRequest) {
       trainingJobs = await MLModelService.getModelTrainingJobs(modelId, limit);
     } else {
       // Get recent training jobs across all models
-      trainingJobs = await MLModelService.getPendingTrainingJobs();
+      trainingJobs = await MLModelService.getRecentTrainingJobs(limit);
     }
 
     return NextResponse.json({

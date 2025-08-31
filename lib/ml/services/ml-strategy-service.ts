@@ -206,19 +206,36 @@ export class MLStrategyService {
     confidence: number,
     config: StrategyConfig
   ): Promise<number> {
+    // Validate inputs
+    if (!Number.isFinite(confidence) || confidence <= 0 || confidence >= 1) {
+      console.warn(`Invalid confidence ${confidence} for Kelly calculation, using fixed size`);
+      return this.calculateFixedPositionSize(config, 0.5);
+    }
+
+    if (!Number.isFinite(config.takeProfitPercent) || !Number.isFinite(config.stopLossPercent) ||
+        config.takeProfitPercent <= 0 || config.stopLossPercent <= 0) {
+      console.warn('Invalid take profit or stop loss percentages for Kelly calculation');
+      return this.calculateFixedPositionSize(config, confidence);
+    }
+
     // Simplified Kelly criterion: f = (bp - q) / b
     // where b = odds, p = probability of win, q = probability of loss
-    
-    const winProbability = confidence;
-    const lossProbability = 1 - confidence;
-    const winLossRatio = config.takeProfitPercent / config.stopLossPercent;
-    
+
+    const winProbability = Math.max(0.01, Math.min(0.99, confidence)); // Bound between 1% and 99%
+    const lossProbability = 1 - winProbability;
+    const winLossRatio = Math.max(0.1, config.takeProfitPercent / config.stopLossPercent); // Minimum 0.1 ratio
+
     const kellyFraction = (winLossRatio * winProbability - lossProbability) / winLossRatio;
-    
-    // Cap Kelly fraction to prevent over-leveraging
-    const cappedKelly = Math.max(0, Math.min(kellyFraction, 0.25)); // Max 25% of portfolio
-    
-    return Math.min(cappedKelly * config.maxPositionSize, config.maxPositionSize);
+
+    // Apply conservative bounds to prevent over-leveraging
+    const maxKelly = 0.1; // Never risk more than 10% of portfolio (much more conservative than 25%)
+    const minKelly = 0.001; // Minimum 0.1% position
+    const cappedKelly = Math.max(minKelly, Math.min(kellyFraction, maxKelly));
+
+    // Additional safety check: if Kelly suggests negative position, use minimum
+    const safeKelly = kellyFraction <= 0 ? minKelly : cappedKelly;
+
+    return Math.min(safeKelly * config.maxPositionSize, config.maxPositionSize);
   }
 
   // Calculate fixed position size

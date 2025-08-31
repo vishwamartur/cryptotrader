@@ -1,14 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { MLStrategyService } from '@/lib/ml/services/ml-strategy-service';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 // Get ML strategy performance and analytics
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const strategyId = searchParams.get('strategyId');
     const action = searchParams.get('action');
-    const days = parseInt(searchParams.get('days') || '30');
-    const limit = parseInt(searchParams.get('limit') || '10');
+    const daysRaw = Number(searchParams.get('days'));
+    const limitRaw = Number(searchParams.get('limit'));
+    const days = Number.isFinite(daysRaw) ? Math.min(Math.max(1, daysRaw), 365) : 30;
+    const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(1, limitRaw), 100) : 10;
 
     if (action === 'top-performing') {
       const topStrategies = await MLStrategyService.getTopPerformingStrategies(limit);
@@ -122,11 +127,21 @@ export async function POST(request: NextRequest) {
         }, { status: 400 });
       }
 
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      if (isNaN(start.valueOf()) || isNaN(end.valueOf()) || start >= end) {
+        return NextResponse.json({
+          success: false,
+          error: 'Invalid date range',
+          timestamp: new Date().toISOString(),
+        }, { status: 400 });
+      }
+
       const backtestResult = await MLStrategyService.backtestStrategy(
         strategyConfig,
         symbol,
-        new Date(startDate),
-        new Date(endDate)
+        start,
+        end
       );
       
       return NextResponse.json({

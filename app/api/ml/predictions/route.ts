@@ -3,6 +3,10 @@ import { MLModelService } from '@/lib/ml/services/ml-model-service';
 import { LSTMModel } from '@/lib/ml/models/lstm-model';
 import { EnsembleModel } from '@/lib/ml/models/ensemble-model';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+export const maxDuration = 300; // up to 5 minutes for predictions
+
 // Get ML predictions
 export async function GET(request: NextRequest) {
   try {
@@ -84,38 +88,43 @@ export async function POST(request: NextRequest) {
       const lstmModel = new LSTMModel(lstmConfig);
 
       try {
-        // For demo purposes, we'll create a mock prediction
-        // In production, you'd train the model first or load a pre-trained model
+        // Check if model is trained before making predictions
+        if (!lstmModel.isTrained()) {
+          return NextResponse.json({
+            success: false,
+            error: 'LSTM model needs to be trained before making predictions',
+            code: 'MODEL_NOT_TRAINED',
+            timestamp: new Date().toISOString(),
+          }, { status: 503 });
+        }
+
         console.log(`Generating LSTM prediction for ${symbol}...`);
+
+        // Generate real prediction using trained model
+        const modelPrediction = await lstmModel.predict(symbol);
 
         prediction = {
           symbol,
-          predictedPrice: 47000 + (Math.random() - 0.5) * 2000,
-          predictedDirection: Math.random() > 0.5 ? 'up' : 'down',
-          confidence: 0.7 + Math.random() * 0.25,
+          predictedPrice: modelPrediction.predictedPrice,
+          predictedDirection: modelPrediction.predictedDirection,
+          confidence: modelPrediction.confidence,
           predictionTime: new Date(),
-          targetTime: new Date(Date.now() + 60 * 60 * 1000),
+          targetTime: new Date(Date.now() + lstmConfig.predictionHorizon * 60 * 60 * 1000),
           features: {
             modelType: 'lstm',
             sequenceLength: lstmConfig.sequenceLength,
             predictionHorizon: lstmConfig.predictionHorizon,
+            inputFeatures: modelPrediction.features,
           },
         };
       } catch (error) {
         console.error('LSTM prediction failed:', error);
-        // Fallback to simple prediction
-        prediction = {
-          symbol,
-          predictedPrice: 47000,
-          predictedDirection: 'sideways',
-          confidence: 0.5,
-          predictionTime: new Date(),
-          targetTime: new Date(Date.now() + 60 * 60 * 1000),
-          features: {
-            modelType: 'lstm',
-            error: 'Fallback prediction due to model error',
-          },
-        };
+        return NextResponse.json({
+          success: false,
+          error: 'Failed to generate LSTM prediction',
+          details: error instanceof Error ? error.message : 'Unknown error',
+          timestamp: new Date().toISOString(),
+        }, { status: 500 });
       } finally {
         lstmModel.dispose();
       }
@@ -163,34 +172,49 @@ export async function POST(request: NextRequest) {
     }
 
     // Store prediction in database if modelId is provided
-    if (modelId && prediction) {
-      const predictionData = {
-        modelId,
-        symbol,
-        predictionType,
-        timeframe,
-        inputData: prediction.features,
-        prediction: {
-          value: prediction.predictedPrice,
-          direction: prediction.predictedDirection,
-        },
-        confidence: prediction.confidence.toString(),
-        predictionTime: prediction.predictionTime,
-        targetTime: prediction.targetTime,
-      };
-
-      const storedPrediction = await MLModelService.createPrediction(predictionData);
-      
+    // Validate prediction before returning
+    if (!prediction || !prediction.predictedPrice || !prediction.confidence) {
       return NextResponse.json({
-        success: true,
-        data: {
-          ...prediction,
-          id: storedPrediction.id,
-          stored: true,
-        },
-        message: 'Prediction created and stored successfully',
+        success: false,
+        error: 'Invalid prediction generated - missing required fields',
         timestamp: new Date().toISOString(),
-      });
+      }, { status: 500 });
+    }
+
+    // Store prediction in database if modelId is provided
+    if (modelId && prediction) {
+      try {
+        const predictionData = {
+          modelId,
+          symbol,
+          predictionType,
+          timeframe,
+          inputData: prediction.features,
+          prediction: {
+            value: prediction.predictedPrice,
+            direction: prediction.predictedDirection,
+          },
+          confidence: prediction.confidence.toString(),
+          predictionTime: prediction.predictionTime,
+          targetTime: prediction.targetTime,
+        };
+
+        const storedPrediction = await MLModelService.createPrediction(predictionData);
+
+        return NextResponse.json({
+          success: true,
+          data: {
+            ...prediction,
+            id: storedPrediction?.id,
+            stored: true,
+          },
+          message: 'Prediction created and stored successfully',
+          timestamp: new Date().toISOString(),
+        });
+      } catch (storageError) {
+        console.error('Failed to store prediction:', storageError);
+        // Continue to return prediction even if storage fails
+      }
     }
 
     return NextResponse.json({

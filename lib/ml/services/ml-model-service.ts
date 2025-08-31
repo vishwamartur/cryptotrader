@@ -1,4 +1,4 @@
-import { eq, and, desc, gte, lte, sql } from 'drizzle-orm';
+import { eq, and, desc, gte, lte, sql, ne } from 'drizzle-orm';
 import { db } from '../../database/connection';
 import { 
   mlModels, 
@@ -93,6 +93,19 @@ export class MLModelService {
     }
   }
 
+  // Get all models (including inactive ones)
+  static async getAllModels(): Promise<MLModel[]> {
+    try {
+      return await db
+        .select()
+        .from(mlModels)
+        .orderBy(desc(mlModels.lastTrainedAt));
+    } catch (error) {
+      console.error('Error fetching all models:', error);
+      return [];
+    }
+  }
+
   // Update model
   static async updateModel(id: string, updates: Partial<Omit<MLModel, 'id' | 'createdAt'>>): Promise<MLModel | null> {
     if (!id || id.trim() === '') {
@@ -146,18 +159,26 @@ export class MLModelService {
     const model = await this.getModelById(id);
     if (!model) return false;
 
-    // Deactivate other models of the same type
-    await db
-      .update(mlModels)
-      .set({ status: 'deprecated', updatedAt: new Date() })
-      .where(and(
-        eq(mlModels.type, model.type),
-        eq(mlModels.status, 'active')
-      ));
+    try {
+      // First activate the new model
+      const updatedModel = await this.updateModel(id, { status: 'active' });
+      if (!updatedModel) return false;
 
-    // Activate this model
-    const updatedModel = await this.updateModel(id, { status: 'active' });
-    return !!updatedModel;
+      // Deactivate other models of the same type (excluding the just-activated model)
+      await db
+        .update(mlModels)
+        .set({ status: 'deprecated', updatedAt: new Date() })
+        .where(and(
+          eq(mlModels.type, model.type),
+          eq(mlModels.status, 'active'),
+          ne(mlModels.id, id) // Exclude the just-activated model
+        ));
+
+      return true;
+    } catch (error) {
+      console.error('Error activating model:', error);
+      return false;
+    }
   }
 
   // Create prediction
@@ -377,6 +398,21 @@ export class MLModelService {
         .orderBy(mlTrainingJobs.createdAt);
     } catch (error) {
       console.error('Error fetching pending training jobs:', error);
+      return [];
+    }
+  }
+
+  // Get recent training jobs across all statuses
+  static async getRecentTrainingJobs(limit: number = 10): Promise<MLTrainingJob[]> {
+    try {
+      const validLimit = Math.max(1, Math.min(limit, 100)); // Between 1 and 100
+      return await db
+        .select()
+        .from(mlTrainingJobs)
+        .orderBy(desc(mlTrainingJobs.createdAt))
+        .limit(validLimit);
+    } catch (error) {
+      console.error('Error fetching recent training jobs:', error);
       return [];
     }
   }
