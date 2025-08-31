@@ -1,35 +1,10 @@
 import { NextResponse } from "next/server"
-import { createDeltaExchangeAPI } from "@/lib/delta-exchange"
+import { createDeltaExchangeAPIFromEnv } from "@/lib/delta-exchange"
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
-    const { searchParams } = new URL(request.url)
-    const api_key = searchParams.get("api_key")
-    const api_secret = searchParams.get("api_secret")
-
-    if (!api_key || !api_secret) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "API credentials required. Please set up your Delta Exchange API credentials.",
-          code: "MISSING_CREDENTIALS",
-        },
-        { status: 400 },
-      )
-    }
-
-    if (api_key.length < 10 || api_secret.length < 10) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Invalid API credentials format. Please check your Delta Exchange API key and secret.",
-          code: "INVALID_CREDENTIALS",
-        },
-        { status: 400 },
-      )
-    }
-
-    const deltaAPI = createDeltaExchangeAPI(api_key, api_secret)
+    // Use environment credentials for authenticated API calls
+    const deltaAPI = createDeltaExchangeAPIFromEnv()
     const positionsData = await deltaAPI.getPositions()
 
     return NextResponse.json({

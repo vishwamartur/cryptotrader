@@ -37,6 +37,9 @@ import { OrderExecution } from '@/components/dashboard/order-execution';
 import { PerformanceCharts } from '@/components/dashboard/performance-charts';
 import { AlertsNotifications } from '@/components/dashboard/alerts-notifications';
 import { QuickActions } from '@/components/dashboard/quick-actions';
+import { MLModelsOverview } from '@/components/dashboard/ml-models-overview';
+import { MLPredictionsFeed } from '@/components/dashboard/ml-predictions-feed';
+import { DeltaConnectionStatus } from '@/components/dashboard/delta-connection-status';
 
 // Types
 interface DashboardWidget {
@@ -145,6 +148,30 @@ const DEFAULT_WIDGETS: DashboardWidget[] = [
     size: 'small',
     category: 'controls',
     priority: 11
+  },
+  {
+    id: 'ml-models',
+    title: 'ML Models Overview',
+    component: MLModelsOverview,
+    size: 'large',
+    category: 'analytics',
+    priority: 12
+  },
+  {
+    id: 'ml-predictions',
+    title: 'ML Predictions Feed',
+    component: MLPredictionsFeed,
+    size: 'medium',
+    category: 'realtime',
+    priority: 13
+  },
+  {
+    id: 'delta-connection',
+    title: 'Delta Exchange Status',
+    component: DeltaConnectionStatus,
+    size: 'small',
+    category: 'monitoring',
+    priority: 14
   }
 ];
 

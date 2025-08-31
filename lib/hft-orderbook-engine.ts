@@ -609,16 +609,16 @@ export class HFTEngine {
   }
 
   processTick(event: TickEvent): HFTSignal[] {
-    const startTime = performance.now();
+    const startTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
     const allSignals: HFTSignal[] = [];
 
     for (const [name, strategy] of this.strategies) {
       if (!strategy.isEnabled()) continue;
 
       try {
-        const strategyStartTime = performance.now();
+        const strategyStartTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
         const signals = strategy.onTick(event);
-        const strategyLatency = performance.now() - strategyStartTime;
+        const strategyLatency = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - strategyStartTime;
 
         // Track latency
         if (!this.latencyTracker.has(name)) {
@@ -640,7 +640,7 @@ export class HFTEngine {
       this.signalHistory.splice(0, this.signalHistory.length - this.maxSignalHistory);
     }
 
-    const totalLatency = performance.now() - startTime;
+    const totalLatency = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startTime;
     console.log(`HFT Engine processed tick in ${totalLatency.toFixed(2)}ms, generated ${allSignals.length} signals`);
 
     return allSignals;

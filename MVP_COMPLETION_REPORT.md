@@ -94,7 +94,7 @@ node test-mvp.js
 | Component | Status | Location |
 |-----------|--------|----------|
 | **Main Trading Interface** | ✅ Working | `/` |
-| **Simple Dashboard** | ✅ Working | `/dashboard` |
+| **Simple Dashboard** | ✅ Working | `/dashboard` |Advanced trading strategies (machine learning integration)
 | **Navigation Header** | ✅ Working | All pages |
 | **Market Data Display** | ✅ Working | Dashboard |
 | **AI Analysis Panel** | ✅ Working | Dashboard |

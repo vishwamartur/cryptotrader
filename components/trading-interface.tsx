@@ -111,7 +111,7 @@ export function TradingInterface() {
       price: quantPrices[quantPrices.length - 1],
     }
     await orderExecutor.executeOrder(order)
-    alert(`Executed ${order.action} order for ${order.symbol} at ${order.price}`)
+    console.log(`Executed ${order.action} order for ${order.symbol} at ${order.price}`)
   }
 
   const handleBuySubmit = async (e: React.FormEvent) => {

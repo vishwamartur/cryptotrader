@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
     }
 
     const deltaClient = await import("@/lib/delta-exchange")
-    const client = new deltaClient.DeltaExchangeClient(apiKey, apiSecret)
+    const client = new deltaClient.DeltaExchangeAPI(apiKey, apiSecret)
 
     const orderResult = await client.placeOrder(orderData)
 

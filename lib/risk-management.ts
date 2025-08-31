@@ -20,6 +20,7 @@ export interface RiskLimits {
   maxDailyLoss: number // Maximum daily loss limit
   maxOpenPositions: number // Maximum number of open positions
   correlationLimit: number // Maximum correlation between positions
+  riskPerTrade: number // Risk per trade as percentage
 }
 
 export interface RiskAlert {
@@ -37,9 +38,11 @@ export class RiskManager {
   private alerts: RiskAlert[] = []
   private dailyPnL = 0
   private startOfDayBalance = 0
+  public config: RiskLimits // Public config property for API access
 
   constructor(limits: RiskLimits) {
     this.limits = limits
+    this.config = limits // Expose limits as config
     this.startOfDayBalance = 0
   }
 
@@ -82,15 +85,20 @@ export class RiskManager {
 
   private calculateTotalExposure(positions: Position[]): number {
     return positions.reduce((total, position) => {
-      return total + Math.abs(position.size * position.entryPrice)
+      const size = parseFloat(position.size || '0');
+      const entryPrice = parseFloat(position.entry_price || '0');
+      return total + Math.abs(size * entryPrice);
     }, 0)
   }
 
   private calculatePortfolioRisk(positions: Position[], balance: number): number {
     const totalRisk = positions.reduce((risk, position) => {
-      const positionValue = Math.abs(position.size * position.entryPrice)
-      const stopLossDistance = Math.abs(position.entryPrice - (position.stopLoss || position.entryPrice * 0.95))
-      const positionRisk = (stopLossDistance / position.entryPrice) * positionValue
+      const size = parseFloat(position.size || '0');
+      const entryPrice = parseFloat(position.entry_price || '0');
+      const positionValue = Math.abs(size * entryPrice);
+      const stopLoss = entryPrice * 0.95; // Default 5% stop loss
+      const stopLossDistance = Math.abs(entryPrice - stopLoss);
+      const positionRisk = (stopLossDistance / entryPrice) * positionValue;
       return risk + positionRisk
     }, 0)
 
@@ -127,10 +135,16 @@ export class RiskManager {
 
   private calculateVaR(positions: Position[], marketData: MarketData[], confidenceLevel = 0.95): number {
     // Simplified VaR calculation using historical simulation
-    const portfolioValue = positions.reduce((total, pos) => total + Math.abs(pos.size * pos.entryPrice), 0)
+    const portfolioValue = positions.reduce((total, pos) => {
+      const size = parseFloat(pos.size || '0');
+      const entryPrice = parseFloat(pos.entry_price || '0');
+      return total + Math.abs(size * entryPrice);
+    }, 0);
 
     // Calculate average volatility from market data
-    const avgVolatility = marketData.reduce((sum, data) => sum + Math.abs(data.change24h), 0) / marketData.length
+    const avgVolatility = marketData && marketData.length > 0
+      ? marketData.reduce((sum, data) => sum + Math.abs(data.change || 0), 0) / marketData.length
+      : 0.02 // Default 2% volatility if no market data
 
     // VaR = Portfolio Value * Volatility * Z-score for confidence level
     const zScore = confidenceLevel === 0.95 ? 1.645 : 2.33 // 95% or 99%
@@ -204,12 +218,14 @@ export class RiskManager {
 
     // Check individual position sizes
     positions.forEach((position, index) => {
-      const positionSize = (Math.abs(position.size * position.entryPrice) / balance) * 100
+      const size = parseFloat(position.size || '0');
+      const entryPrice = parseFloat(position.entry_price || '0');
+      const positionSize = (Math.abs(size * entryPrice) / balance) * 100;
       if (positionSize > this.limits.maxPositionSize) {
         newAlerts.push({
           id: `position-size-${index}-${Date.now()}`,
           type: "warning",
-          message: `Position ${position.symbol} size (${positionSize.toFixed(1)}%) exceeds limit (${this.limits.maxPositionSize}%)`,
+          message: `Position ${position.product?.symbol || 'Unknown'} size (${positionSize.toFixed(1)}%) exceeds limit (${this.limits.maxPositionSize}%)`,
           timestamp: new Date(),
           metric: "positionSize",
           currentValue: positionSize,

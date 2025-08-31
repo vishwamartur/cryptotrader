@@ -71,8 +71,8 @@ export class AITradingEngine {
         })
       });
 
-      if (!response.ok) {
-        throw new Error(`Anthropic API failed: ${response.statusText}`);
+      if (!response || !response.ok) {
+        throw new Error(`Anthropic API failed: ${response?.statusText || 'Network error'}`);
       }
 
       const result = await response.json();
@@ -93,14 +93,22 @@ export class AITradingEngine {
   private buildAnalysisPrompt(marketData: MarketData[], positions: Position[], balance: number): string {
     const marketSummary = marketData
       .slice(0, 10)
-      .map((data) => `${data.symbol}: $${data.price} (${data.change24h > 0 ? "+" : ""}${data.change24h.toFixed(2)}%)`)
+      .map((data) => {
+        const change = data.change || 0;
+        return `${data.symbol}: $${data.price} (${change > 0 ? "+" : ""}${change.toFixed(2)}%)`;
+      })
       .join("\n")
 
     const positionSummary = positions.length
       ? positions
           .map(
-            (pos) =>
-              `${pos.symbol}: ${pos.size} @ $${pos.entryPrice} (${pos.side}) - P&L: ${pos.unrealizedPnl > 0 ? "+" : ""}$${pos.unrealizedPnl.toFixed(2)}`,
+            (pos) => {
+              const pnl = parseFloat(pos.realized_pnl || '0');
+              const symbol = pos.product?.symbol || 'Unknown';
+              const entryPrice = parseFloat(pos.entry_price || '0');
+              const side = pos.size && parseFloat(pos.size) > 0 ? 'LONG' : 'SHORT';
+              return `${symbol}: ${pos.size} @ $${entryPrice} (${side}) - P&L: ${pnl > 0 ? "+" : ""}$${pnl.toFixed(2)}`;
+            }
           )
           .join("\n")
       : "No open positions"

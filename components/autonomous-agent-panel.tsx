@@ -32,6 +32,7 @@ export function AutonomousAgentPanel() {
       maxDailyLoss: 1000,
       maxOpenPositions: 5,
       correlationLimit: 0.7,
+      riskPerTrade: 0.02,
     },
     analysisInterval: 5, // 5 minutes
     maxConcurrentAnalyses: 3,
@@ -41,6 +42,7 @@ export function AutonomousAgentPanel() {
       start: "09:00",
       end: "17:00",
       timezone: "UTC",
+      weekendsEnabled: false,
     },
   })
 

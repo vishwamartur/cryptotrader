@@ -3,9 +3,12 @@ import { RiskManager } from '@/lib/risk-management';
 
 // Initialize Risk Manager with default settings
 const riskManager = new RiskManager({
+  maxPortfolioRisk: 10,
   maxPositionSize: 10000,
   maxDailyLoss: 1000,
   maxDrawdown: 0.15,
+  maxOpenPositions: 10,
+  correlationLimit: 0.7,
   riskPerTrade: 0.02
 });
 
@@ -40,7 +43,19 @@ export async function POST(request: NextRequest) {
     }
 
     // Calculate risk metrics
-    const riskMetrics = riskManager.calculateRiskMetrics(positions, balance);
+    // Mock market data for risk calculation
+    const mockMarketData = positions.map(pos => ({
+      symbol: pos.product?.symbol || 'UNKNOWN',
+      price: parseFloat(pos.mark_price || '0'),
+      change: 0,
+      changePercent: 0,
+      volume: 0,
+      high24h: 0,
+      low24h: 0,
+      lastUpdated: new Date()
+    }));
+
+    const riskMetrics = riskManager.calculateRiskMetrics(positions, balance, mockMarketData);
 
     // Return successful response
     return NextResponse.json({

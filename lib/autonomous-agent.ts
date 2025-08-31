@@ -463,6 +463,11 @@ export class AutonomousAgent {
       this.intervalId = null
     }
 
+    if (this.heartbeatId) {
+      clearInterval(this.heartbeatId)
+      this.heartbeatId = null
+    }
+
     this.state.status = "STOPPED"
     this.notifySubscribers()
     console.log("Autonomous agent stopped")
@@ -472,6 +477,11 @@ export class AutonomousAgent {
     if (this.intervalId) {
       clearInterval(this.intervalId)
       this.intervalId = null
+    }
+
+    if (this.heartbeatId) {
+      clearInterval(this.heartbeatId)
+      this.heartbeatId = null
     }
 
     this.state.status = "PAUSED"
@@ -690,23 +700,64 @@ export class AutonomousAgent {
     positions: Position[]
     balance: number
   }> {
-    // In a real implementation, this would fetch from your data sources
-    // For now, return mock data
-    return {
-      marketData: [
-        {
-          symbol: "BTC-USD",
-          price: 45000 + (Math.random() - 0.5) * 1000,
-          change: (Math.random() - 0.5) * 10,
-          changePercent: (Math.random() - 0.5) * 5,
-          volume: Math.random() * 1000000,
-          high24h: 46000,
-          low24h: 44000,
-          lastUpdated: Date.now()
-        },
-      ],
-      positions: [],
-      balance: 10000,
+    try {
+      // Fetch live data from Delta Exchange APIs
+      const symbols = ['BTC-USD', 'ETH-USD', 'ADA-USD'];
+      const [marketDataResults, portfolioBalance, portfolioPositions] = await Promise.all([
+        Promise.all(symbols.map(async (symbol) => {
+          try {
+            const response = await fetch(`/api/market/realtime/${symbol}`);
+            const result = await response.json();
+            if (result.success && result.data) {
+              return {
+                symbol: result.data.symbol,
+                price: result.data.price,
+                change: result.data.change,
+                changePercent: result.data.changePercent,
+                volume: result.data.volume,
+                high24h: result.data.high24h,
+                low24h: result.data.low24h,
+                lastUpdated: result.data.lastUpdated || Date.now()
+              };
+            }
+            return null;
+          } catch (error) {
+            console.error(`Error fetching market data for ${symbol}:`, error);
+            return null;
+          }
+        })),
+        fetch('/api/portfolio/balance').then(r => r.json()).catch(() => ({ success: false })),
+        fetch('/api/portfolio/positions').then(r => r.json()).catch(() => ({ success: false }))
+      ]);
+
+      // Filter out null market data
+      const marketData = marketDataResults.filter(data => data !== null) as MarketData[];
+
+      // Extract positions and balance
+      const positions = portfolioPositions.success ? (portfolioPositions.positions || []).map((pos: any) => ({
+        symbol: pos.product?.symbol || 'UNKNOWN',
+        size: parseFloat(pos.size || '0'),
+        entryPrice: parseFloat(pos.entry_price || '0'),
+        currentPrice: parseFloat(pos.mark_price || pos.entry_price || '0'),
+        unrealizedPnL: parseFloat(pos.unrealized_pnl || '0'),
+        side: pos.size > 0 ? 'long' : 'short'
+      })) : [];
+
+      const balance = portfolioBalance.success ? parseFloat(portfolioBalance.summary?.totalBalance || '10000') : 10000;
+
+      return {
+        marketData,
+        positions,
+        balance
+      };
+    } catch (error) {
+      console.error('Error fetching market state:', error);
+      // Return minimal fallback data
+      return {
+        marketData: [],
+        positions: [],
+        balance: 10000
+      };
     }
   }
 

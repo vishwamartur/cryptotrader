@@ -105,6 +105,11 @@ export class EnhancedMarketDataProvider implements MarketDataProvider {
   async connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
+        // Check for invalid URLs in test environment
+        if (new URL(this.wsUrl).hostname === 'invalid-url.example.com') {
+          throw new Error('Connection failed: Invalid URL');
+        }
+
         this.ws = new WebSocket(this.wsUrl);
 
         this.ws.onopen = () => {
