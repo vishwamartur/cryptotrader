@@ -46,10 +46,11 @@ function toCanonicalUsdSymbol(sym: string): string {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { symbol: string } }
+  { params }: { params: Promise<{ symbol: string }> }
 ) {
   try {
-    const inputSymbol = params.symbol.toUpperCase();
+    const resolvedParams = await params;
+    const inputSymbol = resolvedParams.symbol.toUpperCase();
 
     // Validate symbol format
     if (!inputSymbol || typeof inputSymbol !== 'string') {
@@ -160,9 +161,9 @@ export async function GET(
       // Return fallback data instead of error when credentials are missing
       console.warn('Delta Exchange credentials not found, returning fallback data');
 
-      const fallbackTicker = generateFallbackTickerData(toCanonicalUsdSymbol(params.symbol.toUpperCase()));
+      const fallbackTicker = generateFallbackTickerData(toCanonicalUsdSymbol(resolvedParams.symbol.toUpperCase()));
       const fallbackData = {
-        symbol: params.symbol.toUpperCase(),
+        symbol: resolvedParams.symbol.toUpperCase(),
         price: parseFloat(fallbackTicker.price),
         bid: parseFloat(fallbackTicker.bid),
         ask: parseFloat(fallbackTicker.ask),
@@ -172,7 +173,7 @@ export async function GET(
         change: parseFloat(fallbackTicker.change),
         changePercent: parseFloat(fallbackTicker.change_percent),
         lastUpdated: Date.now(),
-        deltaSymbol: SYMBOL_MAPPING[params.symbol.toUpperCase()] || params.symbol.toUpperCase(),
+        deltaSymbol: SYMBOL_MAPPING[resolvedParams.symbol.toUpperCase()] || resolvedParams.symbol.toUpperCase(),
         source: 'fallback_data',
         isLiveData: false
       };
@@ -189,9 +190,9 @@ export async function GET(
     console.warn('Delta Exchange API error, attempting fallback data:', errorMessage);
 
     try {
-      const fallbackTicker = generateFallbackTickerData(toCanonicalUsdSymbol(params.symbol.toUpperCase()));
+      const fallbackTicker = generateFallbackTickerData(toCanonicalUsdSymbol(resolvedParams.symbol.toUpperCase()));
       const fallbackData = {
-        symbol: params.symbol.toUpperCase(),
+        symbol: resolvedParams.symbol.toUpperCase(),
         price: parseFloat(fallbackTicker.price),
         bid: parseFloat(fallbackTicker.bid),
         ask: parseFloat(fallbackTicker.ask),
@@ -201,7 +202,7 @@ export async function GET(
         change: parseFloat(fallbackTicker.change),
         changePercent: parseFloat(fallbackTicker.change_percent),
         lastUpdated: Date.now(),
-        deltaSymbol: SYMBOL_MAPPING[params.symbol.toUpperCase()] || params.symbol.toUpperCase(),
+        deltaSymbol: SYMBOL_MAPPING[resolvedParams.symbol.toUpperCase()] || resolvedParams.symbol.toUpperCase(),
         source: 'fallback_data',
         isLiveData: false
       };
