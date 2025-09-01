@@ -66,12 +66,14 @@ export const MovingAverageCrossoverStrategy: QuantStrategy = {
     const bearishCrossover = prevShort >= prevLong && currentShort < currentLong;
 
     if (bullishCrossover) {
-      const strength = (currentShort - currentLong) / currentLong;
-      const confidence = Math.min(Math.abs(strength) * (volumeConfirmation ? 1.5 : 1), 0.9);
+      const strength = Math.abs((currentShort - currentLong) / currentLong);
+      const baseConfidence = Math.max(0.6, strength * 10); // Scale strength appropriately
+      const confidence = Math.min(baseConfidence * (volumeConfirmation ? 1.2 : 1), 0.9);
       return { action: 'buy', confidence, details: { strength, volumeConfirmation } };
     } else if (bearishCrossover) {
-      const strength = (currentLong - currentShort) / currentShort;
-      const confidence = Math.min(Math.abs(strength) * (volumeConfirmation ? 1.5 : 1), 0.9);
+      const strength = Math.abs((currentLong - currentShort) / currentShort);
+      const baseConfidence = Math.max(0.6, strength * 10); // Scale strength appropriately
+      const confidence = Math.min(baseConfidence * (volumeConfirmation ? 1.2 : 1), 0.9);
       return { action: 'sell', confidence, details: { strength, volumeConfirmation } };
     }
 
@@ -93,7 +95,7 @@ export const MeanReversionStrategy: QuantStrategy = {
     const bands = bollinger(prices, 20, 2);
     const currentPrice = prices[prices.length - 1];
     const currentUpper = bands.upper[bands.upper.length - 1];
-    const currentLower = bands.lower[bands.lower.lower - 1];
+    const currentLower = bands.lower[bands.lower.length - 1];
     const currentMiddle = bands.middle[bands.middle.length - 1];
 
     // Calculate position within bands
@@ -154,9 +156,9 @@ export const BreakoutStrategy: QuantStrategy = {
       return { action: 'hold', confidence: 0 };
     }
 
-    // Calculate recent high and low
+    // Calculate recent high and low (excluding current price)
     const lookbackPeriod = 20;
-    const recentPrices = prices.slice(-lookbackPeriod);
+    const recentPrices = prices.slice(-lookbackPeriod - 1, -1); // Exclude current price
     const recentHigh = Math.max(...recentPrices);
     const recentLow = Math.min(...recentPrices);
     const currentPrice = prices[prices.length - 1];
@@ -203,11 +205,32 @@ export class StrategyEnsemble {
   private strategies: QuantStrategy[] = [];
   private weights: number[] = [];
 
-  constructor() {
-    this.addStrategy(MovingAverageCrossoverStrategy, 0.3);
-    this.addStrategy(MeanReversionStrategy, 0.25);
-    this.addStrategy(MomentumStrategy, 0.25);
-    this.addStrategy(BreakoutStrategy, 0.2);
+  constructor(strategies?: QuantStrategy[], weights?: number[]) {
+    if (strategies && weights) {
+      if (strategies.length !== weights.length) {
+        throw new Error('Strategies and weights arrays must have the same length');
+      }
+
+      // Validate weights
+      for (const weight of weights) {
+        if (weight < 0 || weight > 1) {
+          throw new Error('Weights must be between 0 and 1');
+        }
+      }
+
+      this.strategies = [...strategies];
+      this.weights = [...weights];
+    } else if (strategies && !weights) {
+      // Equal weights for all strategies
+      this.strategies = [...strategies];
+      this.weights = new Array(strategies.length).fill(1 / strategies.length);
+    } else {
+      // Default strategies with predefined weights
+      this.addStrategy(MovingAverageCrossoverStrategy, 0.3);
+      this.addStrategy(MeanReversionStrategy, 0.25);
+      this.addStrategy(MomentumStrategy, 0.25);
+      this.addStrategy(BreakoutStrategy, 0.2);
+    }
   }
 
   addStrategy(strategy: QuantStrategy, weight: number = 1) {

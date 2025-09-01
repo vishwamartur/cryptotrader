@@ -1,0 +1,462 @@
+name: Comprehensive Testing Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # Run nightly tests at 2 AM UTC
+    - cron: '0 2 * * *'
+
+env:
+  NODE_VERSION: '18'
+  COVERAGE_THRESHOLD: 80
+  PERFORMANCE_BUDGET_MS: 5000
+
+jobs:
+  # Unit Tests - Fast feedback
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Run unit tests
+      run: |
+        npm run test:unit -- --coverage --ci --watchAll=false
+        
+    - name: Check coverage threshold
+      run: |
+        npm run test:coverage-check
+        
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage/lcov.info
+        flags: unit-tests
+        name: unit-test-coverage
+        
+    - name: Archive test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: unit-test-results
+        path: |
+          coverage/
+          __tests__/unit/
+          
+  # Integration Tests - API and Database
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: unit-tests
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB: cryptotrader_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+          
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Setup test database
+      run: |
+        npm run db:migrate
+        npm run db:seed:test
+      env:
+        DATABASE_URL: postgresql://postgres:testpassword@localhost:5432/cryptotrader_test
+        REDIS_URL: redis://localhost:6379
+        
+    - name: Run integration tests
+      run: |
+        npm run test:integration -- --ci --watchAll=false
+      env:
+        NODE_ENV: test
+        DATABASE_URL: postgresql://postgres:testpassword@localhost:5432/cryptotrader_test
+        REDIS_URL: redis://localhost:6379
+        API_BASE_URL: http://localhost:3000
+        
+    - name: Archive integration test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: integration-test-results
+        path: |
+          __tests__/integration/
+          test-results/
+          
+  # Security Tests
+  security-tests:
+    name: Security Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: unit-tests
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Run security tests
+      run: |
+        npm run test:security -- --ci --watchAll=false
+        
+    - name: Run dependency audit
+      run: |
+        npm audit --audit-level=moderate
+        
+    - name: Run OWASP ZAP security scan
+      uses: zaproxy/action-full-scan@v0.7.0
+      with:
+        target: 'http://localhost:3000'
+        rules_file_name: '.zap/rules.tsv'
+        cmd_options: '-a'
+        
+    - name: Archive security test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: security-test-results
+        path: |
+          __tests__/security/
+          security-reports/
+          
+  # Performance Tests
+  performance-tests:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: integration-tests
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Run performance benchmarks
+      run: |
+        npm run test:performance -- --ci --watchAll=false
+        
+    - name: Run load tests
+      run: |
+        npm run test:load
+        
+    - name: Check performance budget
+      run: |
+        npm run performance:check-budget
+        
+    - name: Generate performance report
+      run: |
+        npm run performance:report
+        
+    - name: Archive performance results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: performance-test-results
+        path: |
+          __tests__/performance/
+          performance-reports/
+          
+  # User Acceptance Tests
+  uat-tests:
+    name: User Acceptance Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: integration-tests
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Install Playwright browsers
+      run: npx playwright install --with-deps
+      
+    - name: Start application
+      run: |
+        npm run build
+        npm start &
+        sleep 30
+      env:
+        NODE_ENV: test
+        
+    - name: Run UAT tests
+      run: |
+        npm run test:uat -- --ci
+        
+    - name: Archive UAT results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: uat-test-results
+        path: |
+          __tests__/uat/
+          uat-reports/
+          screenshots/
+          
+  # Code Quality and Analysis
+  code-quality:
+    name: Code Quality Analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Run ESLint
+      run: npm run lint:ci
+      
+    - name: Run TypeScript check
+      run: npm run type-check
+      
+    - name: Run Prettier check
+      run: npm run format:check
+      
+    - name: SonarCloud Scan
+      uses: SonarSource/sonarcloud-github-action@master
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        
+  # Generate Test Reports
+  test-reports:
+    name: Generate Test Reports
+    runs-on: ubuntu-latest
+    needs: [unit-tests, integration-tests, security-tests, performance-tests, uat-tests]
+    if: always()
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Download all test artifacts
+      uses: actions/download-artifact@v3
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Generate comprehensive test report
+      run: |
+        npm run test:generate-report
+        
+    - name: Upload comprehensive report
+      uses: actions/upload-artifact@v3
+      with:
+        name: comprehensive-test-report
+        path: |
+          test-reports/
+          coverage/
+          
+    - name: Comment PR with test results
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          const path = './test-reports/summary.json';
+          
+          if (fs.existsSync(path)) {
+            const summary = JSON.parse(fs.readFileSync(path, 'utf8'));
+            
+            const comment = `
+            ## 🧪 Test Results Summary
+            
+            | Test Suite | Status | Coverage | Duration |
+            |------------|--------|----------|----------|
+            | Unit Tests | ${summary.unit.status} | ${summary.unit.coverage}% | ${summary.unit.duration}s |
+            | Integration Tests | ${summary.integration.status} | ${summary.integration.coverage}% | ${summary.integration.duration}s |
+            | Security Tests | ${summary.security.status} | N/A | ${summary.security.duration}s |
+            | Performance Tests | ${summary.performance.status} | N/A | ${summary.performance.duration}s |
+            | UAT Tests | ${summary.uat.status} | N/A | ${summary.uat.duration}s |
+            
+            **Overall Coverage:** ${summary.overall.coverage}%
+            **Total Duration:** ${summary.overall.duration}s
+            
+            ${summary.overall.coverage >= 80 ? '✅' : '❌'} Coverage threshold: 80%
+            ${summary.performance.budget_met ? '✅' : '❌'} Performance budget: ${process.env.PERFORMANCE_BUDGET_MS}ms
+            `;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+          }
+          
+  # Nightly Full Test Suite
+  nightly-tests:
+    name: Nightly Full Test Suite
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    timeout-minutes: 120
+    
+    strategy:
+      matrix:
+        node-version: [16, 18, 20]
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Run full test suite
+      run: |
+        npm run test:all -- --ci --watchAll=false
+        
+    - name: Run extended performance tests
+      run: |
+        npm run test:performance:extended
+        
+    - name: Run stress tests
+      run: |
+        npm run test:stress
+        
+    - name: Archive nightly test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: nightly-test-results-${{ matrix.os }}-node${{ matrix.node-version }}
+        path: |
+          test-results/
+          performance-reports/
+          
+  # Deployment Tests
+  deployment-tests:
+    name: Deployment Tests
+    runs-on: ubuntu-latest
+    needs: [unit-tests, integration-tests, security-tests]
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Build application
+      run: npm run build
+      
+    - name: Test production build
+      run: |
+        npm run test:build
+        
+    - name: Run smoke tests
+      run: |
+        npm run test:smoke
+        
+    - name: Test Docker build
+      run: |
+        docker build -t cryptotrader:test .
+        docker run --rm cryptotrader:test npm run test:docker
+        
+    - name: Archive deployment test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: deployment-test-results
+        path: |
+          build-reports/
+          smoke-test-results/
