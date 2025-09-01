@@ -326,7 +326,7 @@ export class AutonomousAgent {
   }
 
   private triggerEmergencyStop(reason: string): void {
-    console.error(`EMERGENCY STOP TRIGGERED: ${reason}`)
+    console.error('EMERGENCY STOP TRIGGERED: %s', reason)
     this.state.status = "EMERGENCY_STOP"
     this.state.errors.push(`Emergency stop: ${reason}`)
 

@@ -156,7 +156,7 @@ export class SantimentService {
         });
 
       } catch (error) {
-        console.warn(`Failed to get Santiment social data for ${symbol}:`, error);
+        console.warn('Failed to get Santiment social data for %s:', symbol, error);
         // Add mock data for failed requests
         results.push({
           symbol,

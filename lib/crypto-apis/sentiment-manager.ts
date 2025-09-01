@@ -206,7 +206,7 @@ export class SentimentAPIManager {
       rateLimiter.count++;
       return await response.json();
     } catch (error) {
-      console.error(`Sentiment API request failed for ${providerName}:`, error);
+      console.error('Sentiment API request failed for %s:', providerName, error);
       throw error;
     }
   }
@@ -279,7 +279,7 @@ export class SentimentAPIManager {
           }
         }
       } catch (error) {
-        console.warn(`Failed to get sentiment from ${provider.name}:`, error);
+        console.warn('Failed to get sentiment from %s:', provider.name, error);
         continue;
       }
     }
@@ -363,7 +363,7 @@ export class SentimentAPIManager {
           lastUpdated: data.timestamp || new Date().toISOString()
         });
       } catch (error) {
-        console.warn(`Failed to get Predicoin sentiment for ${symbol}:`, error);
+        console.warn('Failed to get Predicoin sentiment for %s:', symbol, error);
       }
     }
     
@@ -405,7 +405,7 @@ export class SentimentAPIManager {
           lastUpdated: new Date().toISOString()
         });
       } catch (error) {
-        console.warn(`Failed to get CryptoQokka sentiment for ${symbol}:`, error);
+        console.warn('Failed to get CryptoQokka sentiment for %s:', symbol, error);
       }
     }
     

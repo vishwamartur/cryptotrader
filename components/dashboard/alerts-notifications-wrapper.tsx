@@ -151,27 +151,27 @@ export function useSafeAlerts(alerts: Alert[] | null | undefined): {
       // Filter and validate alerts
       const validAlerts = alerts.filter((alert, index) => {
         if (!alert || typeof alert !== 'object') {
-          console.warn(`useSafeAlerts: Invalid alert at index ${index}:`, alert);
+          console.warn('useSafeAlerts: Invalid alert at index %d:', index, alert);
           return false;
         }
 
         if (!alert.id || typeof alert.id !== 'string') {
-          console.warn(`useSafeAlerts: Alert missing valid ID at index ${index}:`, alert);
+          console.warn('useSafeAlerts: Alert missing valid ID at index %d:', index, alert);
           return false;
         }
 
         if (!alert.type || !['success', 'warning', 'error', 'info'].includes(alert.type)) {
-          console.warn(`useSafeAlerts: Alert has invalid type at index ${index}:`, alert);
+          console.warn('useSafeAlerts: Alert has invalid type at index %d:', index, alert);
           return false;
         }
 
         if (!alert.title || typeof alert.title !== 'string') {
-          console.warn(`useSafeAlerts: Alert missing valid title at index ${index}:`, alert);
+          console.warn('useSafeAlerts: Alert missing valid title at index %d:', index, alert);
           return false;
         }
 
         if (!alert.timestamp || typeof alert.timestamp !== 'number' || isNaN(alert.timestamp)) {
-          console.warn(`useSafeAlerts: Alert has invalid timestamp at index ${index}:`, alert);
+          console.warn('useSafeAlerts: Alert has invalid timestamp at index %d:', index, alert);
           return false;
         }
 
@@ -179,7 +179,7 @@ export function useSafeAlerts(alerts: Alert[] | null | undefined): {
       });
 
       if (validAlerts.length !== alerts.length) {
-        console.warn(`useSafeAlerts: Filtered ${alerts.length - validAlerts.length} invalid alerts`);
+        console.warn('useSafeAlerts: Filtered %d invalid alerts', alerts.length - validAlerts.length);
       }
 
       return validAlerts;
