@@ -405,7 +405,7 @@ export class SentimentAPIManager {
           lastUpdated: new Date().toISOString()
         });
       } catch (error) {
-        console.warn(`Failed to get CryptoQokka sentiment for ${symbol}:`, error);
+        console.warn('Failed to get CryptoQokka sentiment for %s:', symbol, error);
       }
     }
     
