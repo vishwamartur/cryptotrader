@@ -4,9 +4,9 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { 
-  Activity, 
-  Wifi, 
+import {
+  Activity,
+  Wifi,
   WifiOff,
   Server,
   Database,
@@ -18,6 +18,39 @@ import {
   BarChart3
 } from 'lucide-react';
 import { useRealtimeData } from '@/hooks/use-realtime-data';
+
+// Client-side only time display component to prevent hydration mismatch
+function ClientTimeDisplay({ timestamp }: { timestamp: string | number }) {
+  const [displayTime, setDisplayTime] = useState<string>('');
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+    const updateTime = () => {
+      const date = new Date(timestamp);
+      // Use consistent formatting to prevent hydration mismatches
+      setDisplayTime(date.toLocaleTimeString('en-US', {
+        hour12: true,
+        hour: 'numeric',
+        minute: '2-digit',
+        second: '2-digit'
+      }));
+    };
+
+    updateTime();
+    // Update time every second for real-time display
+    const interval = setInterval(updateTime, 1000);
+
+    return () => clearInterval(interval);
+  }, [timestamp]);
+
+  // Show placeholder during server-side rendering and initial hydration
+  if (!isClient) {
+    return <span className="text-gray-400">--:--:-- --</span>;
+  }
+
+  return <span>{displayTime}</span>;
+}
 
 interface SystemHealthProps {
   theme: 'light' | 'dark';
@@ -227,7 +260,7 @@ export function SystemHealth({ theme, autoRefresh, refreshInterval }: SystemHeal
         </div>
         
         <div className="text-xs text-gray-500">
-          Last check: {new Date(systemHealth.lastUpdate).toLocaleTimeString()}
+          Last check: <ClientTimeDisplay timestamp={systemHealth.lastUpdate} />
         </div>
       </div>
 

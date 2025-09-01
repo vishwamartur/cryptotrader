@@ -28,6 +28,7 @@ import {
 // Import dashboard components
 import { LivePriceFeeds } from '@/components/dashboard/live-price-feeds';
 import { PortfolioTracker } from '@/components/dashboard/portfolio-tracker';
+import { NoSSR } from '@/components/no-ssr';
 import { TradingPositions } from '@/components/dashboard/trading-positions';
 import { MarketSentiment } from '@/components/dashboard/market-sentiment';
 import { AITradingSignals } from '@/components/dashboard/ai-trading-signals';
@@ -41,6 +42,33 @@ import { QuickActions } from '@/components/dashboard/quick-actions';
 import { MLModelsOverview } from '@/components/dashboard/ml-models-overview';
 import { MLPredictionsFeed } from '@/components/dashboard/ml-predictions-feed';
 import { DeltaConnectionStatus } from '@/components/dashboard/delta-connection-status';
+
+// Timestamp component to prevent hydration mismatch
+const LastUpdateTimestamp = ({ lastUpdate }: { lastUpdate: Date }) => {
+  const formatTimestamp = (date: Date): string => {
+    try {
+      // Use consistent formatting options to avoid locale differences
+      return date.toLocaleTimeString('en-US', {
+        hour12: true,
+        hour: 'numeric',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+    } catch (error) {
+      console.warn('Error formatting timestamp:', error);
+      // Fallback to ISO string time portion
+      return date.toISOString().split('T')[1].split('.')[0];
+    }
+  };
+
+  return (
+    <NoSSR fallback={<span className="text-sm text-gray-500">Last update: --:--:--</span>}>
+      <span className="text-sm text-gray-500" suppressHydrationWarning>
+        Last update: {formatTimestamp(lastUpdate)}
+      </span>
+    </NoSSR>
+  );
+};
 
 // Types
 interface DashboardWidget {
@@ -307,9 +335,7 @@ export default function AdvancedDashboardDnD() {
                   <><WifiOff className="w-3 h-3 mr-1" /> {connectionStatus}</>
                 )}
               </Badge>
-              <span className="text-sm text-gray-500">
-                Last update: {lastUpdate.toLocaleTimeString()}
-              </span>
+              <LastUpdateTimestamp lastUpdate={lastUpdate} />
             </div>
 
             <div className="flex items-center space-x-2">

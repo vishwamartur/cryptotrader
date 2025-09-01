@@ -126,20 +126,20 @@ function transformProductsForClient(products: DeltaProduct[]) {
     .filter(product =>
       product.state === 'live' &&
       product.trading_status === 'operational' &&
-      (product.product_type === 'perpetual_futures' ||
-       product.product_type === 'futures' ||
-       product.product_type === 'call_options' ||
-       product.product_type === 'put_options')
+      (product.contract_type === 'perpetual_futures' ||
+       product.contract_type === 'futures' ||
+       product.contract_type === 'call_options' ||
+       product.contract_type === 'put_options')
     )
     .map(product => ({
       id: product.id,
       symbol: product.symbol,
       description: product.description,
-      productType: product.product_type,
+      productType: product.contract_type,
       contractType: product.contract_type,
-      underlyingAsset: product.product_specs.underlying_asset.symbol,
-      quotingAsset: product.product_specs.quoting_asset.symbol,
-      settlingAsset: product.product_specs.settling_asset.symbol,
+      underlyingAsset: product.underlying_asset?.symbol || 'Unknown',
+      quotingAsset: product.quoting_asset?.symbol || 'Unknown',
+      settlingAsset: product.settling_asset?.symbol || 'Unknown',
       tickSize: product.tick_size,
       contractValue: product.contract_value,
       contractUnit: product.contract_unit_currency,

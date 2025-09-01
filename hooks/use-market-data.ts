@@ -51,18 +51,33 @@ export function useMarketData() {
 
         // First, get available products
         const productsResponse = await fetch("/api/market/products")
+
+        if (!productsResponse.ok) {
+          throw new Error(`Failed to fetch products: ${productsResponse.status} ${productsResponse.statusText}`)
+        }
+
         const productsData = await productsResponse.json()
 
         if (!productsData.success) {
-          throw new Error(productsData.error)
+          throw new Error(productsData.error || "Failed to fetch products")
         }
 
-        console.log("Available products:", productsData.products.length)
+        // Handle different response structures (products vs result)
+        const products = productsData.products || productsData.result || []
 
-        let selectedPairs = productsData.products
+        if (!Array.isArray(products)) {
+          throw new Error("Invalid products data structure received")
+        }
+
+        console.log("Available products:", products.length)
+
+        let selectedPairs = products
           .filter((product: Product) => {
+            if (!product || !product.symbol) return false
+
             const symbol = product.symbol.toLowerCase()
             const description = product.description?.toLowerCase() || ""
+            const contractType = product.contract_type || product.productType || ""
 
             // First try to find major cryptocurrencies
             return (
@@ -76,23 +91,25 @@ export function useMarketData() {
                 symbol.includes("usdc") ||
                 description.includes("bitcoin") ||
                 description.includes("ethereum")) &&
-              (product.contract_type === "spot" || product.contract_type === "perpetual_futures")
+              (contractType === "spot" || contractType === "perpetual_futures")
             )
           })
           .slice(0, 8)
 
         if (selectedPairs.length === 0) {
           console.log("No major pairs found, using first available products")
-          selectedPairs = productsData.products
-            .filter(
-              (product: Product) => product.contract_type === "spot" || product.contract_type === "perpetual_futures",
-            )
+          selectedPairs = products
+            .filter((product: Product) => {
+              if (!product || !product.symbol) return false
+              const contractType = product.contract_type || product.productType || ""
+              return contractType === "spot" || contractType === "perpetual_futures"
+            })
             .slice(0, 8)
         }
 
         if (selectedPairs.length === 0) {
           console.log("No spot/futures pairs found, using any available products")
-          selectedPairs = productsData.products.slice(0, 8)
+          selectedPairs = products.slice(0, 8)
         }
 
         if (selectedPairs.length === 0) {
@@ -105,46 +122,96 @@ export function useMarketData() {
         )
 
         // Get ticker data for these pairs
-        const symbols = selectedPairs.map((product: Product) => product.symbol).join(",")
+        const symbols = selectedPairs
+          .filter((product: Product) => product && product.symbol)
+          .map((product: Product) => product.symbol)
+          .join(",")
+
+        if (!symbols) {
+          throw new Error("No valid symbols found for ticker data")
+        }
+
         const tickersResponse = await fetch(`/api/market/tickers?symbols=${symbols}`)
+
+        if (!tickersResponse.ok) {
+          throw new Error(`Failed to fetch tickers: ${tickersResponse.status} ${tickersResponse.statusText}`)
+        }
+
         const tickersData = await tickersResponse.json()
 
         if (!tickersData.success) {
-          throw new Error(tickersData.error)
+          throw new Error(tickersData.error || "Failed to fetch ticker data")
         }
 
-        const availableTickers = tickersData.tickers || []
+        const availableTickers = tickersData.tickers || tickersData.result || []
 
-        if (availableTickers.length === 0) {
+        if (!Array.isArray(availableTickers) || availableTickers.length === 0) {
           throw new Error("No ticker data available")
         }
 
         // Transform data for display
-        const transformedData: MarketData[] = availableTickers.map((ticker: Ticker) => {
-          const changeNum = Number.parseFloat(ticker.change || "0")
-          const openPrice = Number.parseFloat(ticker.open || ticker.close || "0")
-          const closePrice = Number.parseFloat(ticker.close || "0")
-          const changePercent = openPrice > 0 ? ((changeNum / openPrice) * 100).toFixed(2) : "0.00"
+        const transformedData: MarketData[] = availableTickers
+          .filter((ticker: Ticker) => ticker && ticker.symbol && ticker.close)
+          .map((ticker: Ticker) => {
+            const changeNum = Number.parseFloat(ticker.change || "0")
+            const openPrice = Number.parseFloat(ticker.open || ticker.close || "0")
+            const closePrice = Number.parseFloat(ticker.close || "0")
+            const changePercent = openPrice > 0 ? ((changeNum / openPrice) * 100).toFixed(2) : "0.00"
 
-          return {
-            symbol: ticker.symbol,
-            price: closePrice.toLocaleString("en-US", {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 8,
-            }),
-            change: changeNum >= 0 ? `+${changeNum.toFixed(2)}` : changeNum.toFixed(2),
-            changePercent: changeNum >= 0 ? `+${changePercent}%` : `${changePercent}%`,
-            volume: formatVolume(ticker.turnover || ticker.volume || "0"),
-            high: ticker.high || "0",
-            low: ticker.low || "0",
-          }
-        })
+            return {
+              symbol: ticker.symbol || "Unknown",
+              price: closePrice.toLocaleString("en-US", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 8,
+              }),
+              change: changeNum >= 0 ? `+${changeNum.toFixed(2)}` : changeNum.toFixed(2),
+              changePercent: changeNum >= 0 ? `+${changePercent}%` : `${changePercent}%`,
+              volume: formatVolume(ticker.turnover || ticker.volume || "0"),
+              high: ticker.high || "0",
+              low: ticker.low || "0",
+            }
+          })
+
+        if (transformedData.length === 0) {
+          throw new Error("No valid market data could be processed")
+        }
 
         setMarketData(transformedData)
         console.log("Market data loaded:", transformedData.length, "pairs")
       } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : "Failed to fetch market data"
         console.error("Error fetching market data:", err)
-        setError(err instanceof Error ? err.message : "Failed to fetch market data")
+
+        // Enhanced error logging with context
+        console.error("Market data fetch error details:", {
+          error: errorMessage,
+          timestamp: new Date().toISOString(),
+          url: typeof window !== 'undefined' ? window.location.href : 'server'
+        })
+
+        setError(errorMessage)
+
+        // Log to monitoring system if available (client-side only)
+        if (typeof window !== 'undefined') {
+          try {
+            fetch('/api/health/detailed', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                type: 'market_data_error',
+                error: {
+                  message: errorMessage,
+                  stack: err instanceof Error ? err.stack : undefined
+                },
+                timestamp: new Date().toISOString()
+              })
+            }).catch(monitoringError => {
+              console.warn("Failed to log error to monitoring:", monitoringError)
+            })
+          } catch (monitoringError) {
+            console.warn("Error logging to monitoring system:", monitoringError)
+          }
+        }
       } finally {
         setLoading(false)
       }

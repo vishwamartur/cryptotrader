@@ -33,6 +33,19 @@ export interface ProductInfo {
   state: string;
 }
 
+// Network and retry configuration
+interface NetworkConfig {
+  maxRetries: number;
+  retryDelay: number;
+  timeout: number;
+  exponentialBackoff: boolean;
+}
+
+interface FetchOptions extends RequestInit {
+  timeout?: number;
+  retries?: number;
+}
+
 class RealtimeMarketDataManager extends EventEmitter {
   private wsConnection: WebSocket | null = null;
   private reconnectAttempts = 0;
@@ -45,29 +58,255 @@ class RealtimeMarketDataManager extends EventEmitter {
   private pollingInterval: NodeJS.Timeout | null = null;
   private lastUpdateTime = 0;
 
+  // Network configuration
+  private networkConfig: NetworkConfig = {
+    maxRetries: 3,
+    retryDelay: 1000,
+    timeout: 10000,
+    exponentialBackoff: true,
+  };
+
+  // Track network status
+  private isOnline = true;
+  private lastNetworkCheck = 0;
+
   constructor() {
     super();
+    this.setupNetworkMonitoring();
     this.loadProducts();
+  }
+
+  // Setup network monitoring
+  private setupNetworkMonitoring(): void {
+    if (typeof window !== 'undefined') {
+      // Monitor online/offline status
+      window.addEventListener('online', () => {
+        this.isOnline = true;
+        this.emit('networkStatusChanged', { online: true });
+        // Retry failed operations when back online
+        this.retryFailedOperations();
+      });
+
+      window.addEventListener('offline', () => {
+        this.isOnline = false;
+        this.emit('networkStatusChanged', { online: false });
+      });
+
+      this.isOnline = navigator.onLine;
+    }
+  }
+
+  // Check network connectivity
+  private async checkNetworkConnectivity(): Promise<boolean> {
+    if (typeof window === 'undefined') return true;
+
+    // Use cached result if recent
+    const now = Date.now();
+    if (now - this.lastNetworkCheck < 5000) {
+      return this.isOnline;
+    }
+
+    try {
+      // Try to fetch a small resource to test connectivity
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+      await fetch('/favicon.ico', {
+        method: 'HEAD',
+        signal: controller.signal,
+        cache: 'no-cache'
+      });
+
+      clearTimeout(timeoutId);
+      this.isOnline = true;
+      this.lastNetworkCheck = now;
+      return true;
+    } catch (error) {
+      this.isOnline = false;
+      this.lastNetworkCheck = now;
+      return false;
+    }
+  }
+
+  // Enhanced fetch with timeout, retries, and error handling
+  private async fetchWithRetry(url: string, options: FetchOptions = {}): Promise<Response> {
+    const {
+      timeout = this.networkConfig.timeout,
+      retries = this.networkConfig.maxRetries,
+      ...fetchOptions
+    } = options;
+
+    let lastError: Error;
+
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        // Check network connectivity before attempting
+        if (!(await this.checkNetworkConnectivity())) {
+          throw new Error('Network connectivity unavailable');
+        }
+
+        // Create abort controller for timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => {
+          controller.abort();
+        }, timeout);
+
+        const response = await fetch(url, {
+          ...fetchOptions,
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        return response;
+      } catch (error) {
+        lastError = error as Error;
+
+        // Don't retry on certain errors
+        if (error instanceof Error) {
+          if (error.name === 'AbortError') {
+            throw new Error(`Request timeout after ${timeout}ms`);
+          }
+          if (error.message.includes('HTTP 4')) {
+            // Don't retry client errors (4xx)
+            throw error;
+          }
+        }
+
+        // Calculate delay for next attempt
+        if (attempt < retries) {
+          const delay = this.networkConfig.exponentialBackoff
+            ? this.networkConfig.retryDelay * Math.pow(2, attempt)
+            : this.networkConfig.retryDelay;
+
+          this.emit('retryAttempt', {
+            attempt: attempt + 1,
+            maxRetries: retries,
+            delay,
+            error: error.message
+          });
+
+          await this.sleep(delay);
+        }
+      }
+    }
+
+    throw lastError;
+  }
+
+  // Utility method for delays
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  // Retry failed operations when network comes back online
+  private async retryFailedOperations(): Promise<void> {
+    try {
+      // Reload products if cache is empty
+      if (this.productsCache.size === 0) {
+        await this.loadProducts();
+      }
+
+      // Refresh market data if we have subscriptions
+      if (this.subscribedSymbols.size > 0) {
+        await this.fetchMarketData();
+      }
+    } catch (error) {
+      console.warn('Failed to retry operations after network recovery:', error);
+    }
   }
 
   // Load all available products from Delta Exchange
   async loadProducts(): Promise<void> {
     try {
-      const response = await fetch('/api/market/products');
+      this.emit('loadingProducts', true);
+
+      // Handle both client-side and server-side URL resolution
+      const baseUrl = typeof window !== 'undefined'
+        ? window.location.origin
+        : process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+
+      const url = `${baseUrl}/api/market/products`;
+
+      // Use enhanced fetch with retry logic
+      const response = await this.fetchWithRetry(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        cache: 'no-cache',
+      });
+
       const data = await response.json();
-      
+
       if (data.success && data.result) {
         this.productsCache.clear();
         data.result.forEach((product: ProductInfo) => {
           this.productsCache.set(product.symbol, product);
         });
-        
+
         this.emit('productsLoaded', Array.from(this.productsCache.values()));
+        this.emit('loadingProducts', false);
+
+        console.log(`Successfully loaded ${data.result.length} products`);
+      } else {
+        throw new Error(data.message || 'Invalid response format from products API');
       }
     } catch (error) {
-      console.error('Failed to load products:', error);
-      this.emit('error', error);
+      this.emit('loadingProducts', false);
+
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      const enhancedError = new Error(`Failed to load products: ${errorMessage}`);
+
+      console.error('Failed to load products:', {
+        error: errorMessage,
+        timestamp: new Date().toISOString(),
+        networkStatus: this.isOnline ? 'online' : 'offline',
+        cacheSize: this.productsCache.size,
+      });
+
+      // Emit detailed error information
+      this.emit('error', {
+        type: 'PRODUCTS_LOAD_FAILED',
+        message: errorMessage,
+        originalError: error,
+        timestamp: Date.now(),
+        networkStatus: this.isOnline,
+        retryable: this.isRetryableError(error),
+      });
+
+      // Don't throw the error to prevent breaking the application
+      // Instead, emit error event and let consumers handle it
     }
+  }
+
+  // Determine if an error is retryable
+  private isRetryableError(error: any): boolean {
+    if (!error) return false;
+
+    const message = error.message?.toLowerCase() || '';
+
+    // Network-related errors that are retryable
+    const retryableErrors = [
+      'network',
+      'timeout',
+      'fetch',
+      'connection',
+      'unavailable',
+      'temporary',
+      'rate limit',
+      'too many requests',
+    ];
+
+    return retryableErrors.some(keyword => message.includes(keyword)) ||
+           error.name === 'NetworkError' ||
+           error.name === 'TimeoutError' ||
+           (error.status && error.status >= 500); // Server errors
   }
 
   // Get all available products
@@ -114,25 +353,42 @@ class RealtimeMarketDataManager extends EventEmitter {
 
     try {
       const symbols = Array.from(this.subscribedSymbols);
-      const response = await fetch(`/api/market/tickers?symbols=${symbols.join(',')}`);
+
+      // Handle both client-side and server-side URL resolution
+      const baseUrl = typeof window !== 'undefined'
+        ? window.location.origin
+        : process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+
+      const url = `${baseUrl}/api/market/tickers?symbols=${symbols.join(',')}`;
+
+      // Use enhanced fetch with retry logic
+      const response = await this.fetchWithRetry(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        cache: 'no-cache',
+      });
+
       const data = await response.json();
 
       if (data.success && data.result) {
         const now = Date.now();
-        
+
         data.result.forEach((ticker: any) => {
           const marketData: RealtimeMarketData = {
             symbol: ticker.symbol,
-            price: ticker.price,
-            change: ticker.change,
-            changePercent: ticker.changePercent,
-            volume: ticker.volume,
-            high24h: ticker.high24h,
-            low24h: ticker.low24h,
-            bid: ticker.bestBid,
-            ask: ticker.bestAsk,
-            bidSize: ticker.bestBidSize,
-            askSize: ticker.bestAskSize,
+            price: ticker.price || 0,
+            change: ticker.change || 0,
+            changePercent: ticker.changePercent || 0,
+            volume: ticker.volume || 0,
+            high24h: ticker.high24h || 0,
+            low24h: ticker.low24h || 0,
+            bid: ticker.bestBid || 0,
+            ask: ticker.bestAsk || 0,
+            bidSize: ticker.bestBidSize || 0,
+            askSize: ticker.bestAskSize || 0,
             openInterest: ticker.openInterest,
             fundingRate: ticker.fundingRate,
             markPrice: ticker.markPrice,
@@ -153,10 +409,29 @@ class RealtimeMarketDataManager extends EventEmitter {
 
         this.lastUpdateTime = now;
         this.emit('dataUpdated', now);
+      } else {
+        throw new Error(data.message || 'Invalid response format from tickers API');
       }
     } catch (error) {
-      console.error('Error fetching market data:', error);
-      this.emit('error', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+
+      console.error('Error fetching market data:', {
+        error: errorMessage,
+        timestamp: new Date().toISOString(),
+        symbols: Array.from(this.subscribedSymbols),
+        networkStatus: this.isOnline ? 'online' : 'offline',
+      });
+
+      // Emit detailed error information
+      this.emit('error', {
+        type: 'MARKET_DATA_FETCH_FAILED',
+        message: errorMessage,
+        originalError: error,
+        timestamp: Date.now(),
+        symbols: Array.from(this.subscribedSymbols),
+        networkStatus: this.isOnline,
+        retryable: this.isRetryableError(error),
+      });
     }
   }
 

@@ -7,6 +7,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getLogger } from '@/lib/trading/logger';
 import { getMonitoring } from '@/lib/trading/monitoring';
 import { generateCorrelationId } from '@/lib/trading/errors';
+import { startupDiagnosticService } from '@/lib/startup/diagnostic-service';
+import { apiHealthService } from '@/lib/crypto-apis/api-health-service';
+import { apiConfigService } from '@/lib/config/api-config';
 
 const logger = getLogger();
 const monitoring = getMonitoring();
@@ -26,26 +29,55 @@ const HEALTH_CHECK_CONFIG = {
 export async function GET(request: NextRequest) {
   const correlationId = generateCorrelationId();
   const startTime = Date.now();
+  const { searchParams } = new URL(request.url);
+  const includeStartupDiagnostic = searchParams.get('startup') === 'true';
+  const includeAPIHealth = searchParams.get('apis') === 'true';
+  const includeConfiguration = searchParams.get('config') === 'true';
 
   try {
-    logger.debug('Detailed health check initiated', { correlationId });
+    logger.debug('Detailed health check initiated', {
+      correlationId,
+      includeStartupDiagnostic,
+      includeAPIHealth,
+      includeConfiguration
+    });
 
     // Perform comprehensive health checks
-    const [
-      databaseCheck,
-      redisCheck,
-      deltaAPICheck,
-      systemCheck,
-      monitoringCheck,
-      rateLimitCheck
-    ] = await Promise.allSettled([
+    const healthChecks = [
       checkDatabase(),
       checkRedis(),
       checkDeltaAPI(),
       checkSystemResources(),
       checkMonitoring(),
       checkRateLimit()
-    ]);
+    ];
+
+    // Add additional checks if requested
+    if (includeStartupDiagnostic) {
+      healthChecks.push(runStartupDiagnostic());
+    }
+
+    if (includeAPIHealth) {
+      healthChecks.push(runAPIHealthCheck());
+    }
+
+    if (includeConfiguration) {
+      healthChecks.push(runConfigurationCheck());
+    }
+
+    const results = await Promise.allSettled(healthChecks);
+
+    const [
+      databaseCheck,
+      redisCheck,
+      deltaAPICheck,
+      systemCheck,
+      monitoringCheck,
+      rateLimitCheck,
+      startupDiagnosticCheck,
+      apiHealthCheck,
+      configurationCheck
+    ] = results;
 
     const healthStatus = {
       status: 'healthy' as 'healthy' | 'degraded' | 'unhealthy',
@@ -60,7 +92,16 @@ export async function GET(request: NextRequest) {
         delta_api: getCheckResult(deltaAPICheck),
         system: getCheckResult(systemCheck),
         monitoring: getCheckResult(monitoringCheck),
-        rate_limit: getCheckResult(rateLimitCheck)
+        rate_limit: getCheckResult(rateLimitCheck),
+        ...(includeStartupDiagnostic && startupDiagnosticCheck && {
+          startup_diagnostic: getCheckResult(startupDiagnosticCheck)
+        }),
+        ...(includeAPIHealth && apiHealthCheck && {
+          api_health: getCheckResult(apiHealthCheck)
+        }),
+        ...(includeConfiguration && configurationCheck && {
+          configuration: getCheckResult(configurationCheck)
+        })
       },
       metrics: {
         responseTime: Date.now() - startTime,
@@ -324,5 +365,57 @@ export async function HEAD(request: NextRequest) {
     return new NextResponse(null, { status: hasFailures ? 503 : 200 });
   } catch (error) {
     return new NextResponse(null, { status: 503 });
+  }
+}
+
+// Additional health check functions
+async function runStartupDiagnostic() {
+  try {
+    const diagnostic = await startupDiagnosticService.runFullDiagnostic();
+    return {
+      status: diagnostic.canStart ? 'healthy' : 'unhealthy',
+      diagnostic,
+      message: `Startup diagnostic: ${diagnostic.overallStatus}`
+    };
+  } catch (error) {
+    return {
+      status: 'unhealthy',
+      message: `Startup diagnostic failed: ${(error as Error).message}`
+    };
+  }
+}
+
+async function runAPIHealthCheck() {
+  try {
+    const healthReport = await apiHealthService.getOverallHealthReport();
+    return {
+      status: healthReport.status === 'unhealthy' ? 'unhealthy' : 'healthy',
+      healthReport,
+      message: `API health: ${healthReport.status}`
+    };
+  } catch (error) {
+    return {
+      status: 'unhealthy',
+      message: `API health check failed: ${(error as Error).message}`
+    };
+  }
+}
+
+async function runConfigurationCheck() {
+  try {
+    const validation = apiConfigService.validateConfiguration();
+    const summary = apiConfigService.getConfigurationSummary();
+
+    return {
+      status: validation.isValid ? 'healthy' : 'degraded',
+      validation,
+      summary,
+      message: `Configuration: ${validation.isValid ? 'valid' : 'has issues'}`
+    };
+  } catch (error) {
+    return {
+      status: 'unhealthy',
+      message: `Configuration check failed: ${(error as Error).message}`
+    };
   }
 }

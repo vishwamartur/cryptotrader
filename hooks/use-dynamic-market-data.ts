@@ -3,14 +3,25 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { realtimeMarketData, RealtimeMarketData, ProductInfo } from '@/lib/realtime-market-data';
 
+export interface MarketDataError {
+  type: string;
+  message: string;
+  timestamp: number;
+  networkStatus: boolean;
+  retryable: boolean;
+  originalError?: any;
+}
+
 export interface MarketDataState {
   products: ProductInfo[];
   marketData: Map<string, RealtimeMarketData>;
   subscribedSymbols: string[];
   isConnected: boolean;
   isLoading: boolean;
-  error: string | null;
+  error: MarketDataError | string | null;
   lastUpdate: number;
+  networkStatus: boolean;
+  loadingProducts: boolean;
 }
 
 export interface MarketDataHookReturn extends MarketDataState {
@@ -33,6 +44,8 @@ export function useDynamicMarketData(): MarketDataHookReturn {
     isLoading: true,
     error: null,
     lastUpdate: 0,
+    networkStatus: true,
+    loadingProducts: false,
   });
 
   const stateRef = useRef(state);
@@ -100,11 +113,32 @@ export function useDynamicMarketData(): MarketDataHookReturn {
 
   // Handle errors
   const handleError = useCallback((error: any) => {
-    updateState({ 
-      error: error?.message || 'Unknown error occurred',
-      isLoading: false 
+    // Handle both old string errors and new structured errors
+    const errorInfo = typeof error === 'string'
+      ? { type: 'UNKNOWN', message: error, timestamp: Date.now(), networkStatus: true, retryable: false }
+      : error;
+
+    updateState({
+      error: errorInfo,
+      isLoading: false,
+      loadingProducts: false,
     });
   }, [updateState]);
+
+  // Handle network status changes
+  const handleNetworkStatusChanged = useCallback((status: { online: boolean }) => {
+    updateState({ networkStatus: status.online });
+  }, [updateState]);
+
+  // Handle loading states
+  const handleLoadingProducts = useCallback((loading: boolean) => {
+    updateState({ loadingProducts: loading });
+  }, [updateState]);
+
+  // Handle retry attempts
+  const handleRetryAttempt = useCallback((info: { attempt: number; maxRetries: number; delay: number; error: string }) => {
+    console.log(`Retry attempt ${info.attempt}/${info.maxRetries} in ${info.delay}ms due to: ${info.error}`);
+  }, []);
 
   // Handle data updates
   const handleDataUpdated = useCallback((timestamp: number) => {
@@ -124,6 +158,9 @@ export function useDynamicMarketData(): MarketDataHookReturn {
     manager.on('unsubscribed', handleUnsubscribed);
     manager.on('error', handleError);
     manager.on('dataUpdated', handleDataUpdated);
+    manager.on('networkStatusChanged', handleNetworkStatusChanged);
+    manager.on('loadingProducts', handleLoadingProducts);
+    manager.on('retryAttempt', handleRetryAttempt);
 
     // Initialize state from manager
     const products = manager.getProducts();
@@ -154,6 +191,9 @@ export function useDynamicMarketData(): MarketDataHookReturn {
       manager.off('unsubscribed', handleUnsubscribed);
       manager.off('error', handleError);
       manager.off('dataUpdated', handleDataUpdated);
+      manager.off('networkStatusChanged', handleNetworkStatusChanged);
+      manager.off('loadingProducts', handleLoadingProducts);
+      manager.off('retryAttempt', handleRetryAttempt);
     };
   }, [
     handleProductsLoaded,
@@ -164,6 +204,9 @@ export function useDynamicMarketData(): MarketDataHookReturn {
     handleUnsubscribed,
     handleError,
     handleDataUpdated,
+    handleNetworkStatusChanged,
+    handleLoadingProducts,
+    handleRetryAttempt,
   ]);
 
   // API methods

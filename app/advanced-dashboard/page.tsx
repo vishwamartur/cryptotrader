@@ -197,6 +197,7 @@ export default function AdvancedDashboard() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'connecting'>('connecting');
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
+  const [clientTimeString, setClientTimeString] = useState<string>('');
   const [alerts, setAlerts] = useState<any[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
@@ -222,6 +223,34 @@ export default function AdvancedDashboard() {
       setLayout(prev => ({ ...prev, theme: savedTheme }));
     }
   }, []);
+
+  // Client-side time formatting to prevent hydration mismatch
+  useEffect(() => {
+    const updateTimeString = () => {
+      setClientTimeString(lastUpdate.toLocaleTimeString());
+    };
+
+    // Update immediately after hydration
+    updateTimeString();
+
+    // Set up interval to update time string
+    const interval = setInterval(updateTimeString, 1000);
+
+    return () => clearInterval(interval);
+  }, [lastUpdate]);
+
+  // Simulate real-time data updates
+  useEffect(() => {
+    // Set connection status to connected after component mounts
+    setConnectionStatus('connected');
+
+    // Update lastUpdate time periodically
+    const updateInterval = setInterval(() => {
+      setLastUpdate(new Date());
+    }, layout.refreshInterval || 5000);
+
+    return () => clearInterval(updateInterval);
+  }, [layout.refreshInterval]);
 
   // Save layout changes
   const saveLayout = useCallback((newLayout: DashboardLayout) => {
@@ -334,7 +363,7 @@ export default function AdvancedDashboard() {
                 )}
               </Badge>
               <span className="text-sm text-gray-500">
-                Last update: {lastUpdate.toLocaleTimeString()}
+                Last update: {clientTimeString || 'Loading...'}
               </span>
             </div>
 
