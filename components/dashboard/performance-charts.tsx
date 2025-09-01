@@ -1,9 +1,34 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { BarChart3, TrendingUp, Calendar } from 'lucide-react';
+
+// Client-side only chart value display component to prevent hydration mismatch
+function ClientChartValue({ value, prefix = '$', suffix = '', className = '' }: {
+  value: number | undefined;
+  prefix?: string;
+  suffix?: string;
+  className?: string;
+}) {
+  const [displayValue, setDisplayValue] = useState<string>('');
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+    if (value !== undefined) {
+      setDisplayValue(`${prefix}${value.toFixed(2)}${suffix}`);
+    }
+  }, [value, prefix, suffix]);
+
+  // Show placeholder during server-side rendering and initial hydration
+  if (!isClient) {
+    return <span className={`text-gray-400 ${className}`}>---.--</span>;
+  }
+
+  return <span className={className}>{displayValue}</span>;
+}
 
 interface PerformanceChartsProps {
   theme: 'light' | 'dark';
@@ -14,19 +39,41 @@ interface PerformanceChartsProps {
 export function PerformanceCharts({ theme }: PerformanceChartsProps) {
   const [timeframe, setTimeframe] = useState<'1D' | '7D' | '30D' | '1Y'>('7D');
   const [chartType, setChartType] = useState<'pnl' | 'equity' | 'drawdown'>('pnl');
+  const [chartData, setChartData] = useState<Array<{ x: number; y: number }>>([]);
+  const [isClient, setIsClient] = useState(false);
 
-  // Mock chart data
-  const generateChartData = () => {
+  // Generate chart data with consistent seed for hydration safety
+  const generateChartData = (timeframe: string, seed: number = 42) => {
     const points = timeframe === '1D' ? 24 : timeframe === '7D' ? 7 : timeframe === '30D' ? 30 : 365;
+
+    // Use a seeded random function for consistent results
+    const seededRandom = (seed: number) => {
+      const x = Math.sin(seed) * 10000;
+      return x - Math.floor(x);
+    };
+
     return Array.from({ length: points }, (_, i) => ({
       x: i,
-      y: Math.random() * 1000 + 500 + (i * 10)
+      y: seededRandom(seed + i) * 1000 + 500 + (i * 10)
     }));
   };
 
-  const chartData = generateChartData();
-  const maxValue = Math.max(...chartData.map(d => d.y));
-  const minValue = Math.min(...chartData.map(d => d.y));
+  // Initialize chart data on client-side only
+  useEffect(() => {
+    setIsClient(true);
+    setChartData(generateChartData(timeframe));
+  }, [timeframe]);
+
+  // Update chart data when timeframe changes (client-side only)
+  useEffect(() => {
+    if (isClient) {
+      setChartData(generateChartData(timeframe));
+    }
+  }, [timeframe, isClient]);
+
+  const maxValue = chartData.length > 0 ? Math.max(...chartData.map(d => d.y)) : 0;
+  const minValue = chartData.length > 0 ? Math.min(...chartData.map(d => d.y)) : 0;
+  const currentValue = chartData.length > 0 ? chartData[chartData.length - 1]?.y : undefined;
 
   return (
     <div className="space-y-4">
@@ -87,27 +134,43 @@ export function PerformanceCharts({ theme }: PerformanceChartsProps) {
                   </linearGradient>
                 </defs>
                 
-                {/* Chart line */}
-                <polyline
-                  fill="none"
-                  stroke="#3b82f6"
-                  strokeWidth="2"
-                  points={chartData.map((point, index) => 
-                    `${(index / (chartData.length - 1)) * 380 + 10},${190 - ((point.y - minValue) / (maxValue - minValue)) * 170}`
-                  ).join(' ')}
-                />
-                
-                {/* Fill area */}
-                <polygon
-                  fill="url(#chartGradient)"
-                  points={[
-                    ...chartData.map((point, index) => 
-                      `${(index / (chartData.length - 1)) * 380 + 10},${190 - ((point.y - minValue) / (maxValue - minValue)) * 170}`
-                    ),
-                    `${390},190`,
-                    `10,190`
-                  ].join(' ')}
-                />
+                {/* Chart line - only render when data is available */}
+                {chartData.length > 0 && (
+                  <>
+                    <polyline
+                      fill="none"
+                      stroke="#3b82f6"
+                      strokeWidth="2"
+                      points={chartData.map((point, index) =>
+                        `${(index / (chartData.length - 1)) * 380 + 10},${190 - ((point.y - minValue) / (maxValue - minValue)) * 170}`
+                      ).join(' ')}
+                    />
+
+                    {/* Fill area */}
+                    <polygon
+                      fill="url(#chartGradient)"
+                      points={[
+                        ...chartData.map((point, index) =>
+                          `${(index / (chartData.length - 1)) * 380 + 10},${190 - ((point.y - minValue) / (maxValue - minValue)) * 170}`
+                        ),
+                        `${390},190`,
+                        `10,190`
+                      ].join(' ')}
+                    />
+                  </>
+                )}
+
+                {/* Loading placeholder when no data */}
+                {chartData.length === 0 && (
+                  <text
+                    x="200"
+                    y="100"
+                    textAnchor="middle"
+                    className="fill-gray-400 text-sm"
+                  >
+                    Loading chart data...
+                  </text>
+                )}
                 
                 {/* Grid lines */}
                 {[0, 1, 2, 3, 4].map(i => (
@@ -129,15 +192,21 @@ export function PerformanceCharts({ theme }: PerformanceChartsProps) {
             <div className="grid grid-cols-3 gap-4 text-sm">
               <div className="text-center">
                 <div className="text-gray-500">Current</div>
-                <div className="font-medium">${chartData[chartData.length - 1]?.y.toFixed(2)}</div>
+                <div className="font-medium">
+                  <ClientChartValue value={currentValue} />
+                </div>
               </div>
               <div className="text-center">
                 <div className="text-gray-500">High</div>
-                <div className="font-medium text-green-500">${maxValue.toFixed(2)}</div>
+                <div className="font-medium text-green-500">
+                  <ClientChartValue value={maxValue} />
+                </div>
               </div>
               <div className="text-center">
                 <div className="text-gray-500">Low</div>
-                <div className="font-medium text-red-500">${minValue.toFixed(2)}</div>
+                <div className="font-medium text-red-500">
+                  <ClientChartValue value={minValue} />
+                </div>
               </div>
             </div>
           </div>

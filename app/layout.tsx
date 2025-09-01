@@ -5,6 +5,8 @@ import "./globals.css"
 import { Toaster } from "@/components/ui/toaster"
 import { Analytics } from "@vercel/analytics/next"
 import { SpeedInsights } from "@vercel/speed-insights/next"
+import { ClientBody } from "@/components/client-body"
+import { NoSSR } from "@/components/no-ssr"
 
 const geistSans = Geist({
   subsets: ["latin"],
@@ -31,11 +33,15 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-      <body>
-        {children}
-        <Toaster />
-        <Analytics />
-        <SpeedInsights />
+      <body suppressHydrationWarning={true}>
+        <ClientBody>
+          {children}
+          <NoSSR>
+            <Toaster />
+          </NoSSR>
+          <Analytics />
+          <SpeedInsights />
+        </ClientBody>
       </body>
     </html>
   )

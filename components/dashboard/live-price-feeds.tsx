@@ -73,12 +73,21 @@ function PriceCard({ symbol, data, product, theme, onClick, isSelected, isLoadin
     );
   }
 
-  const isPositive = data.change >= 0;
-  const formatPrice = (price: number) => {
+  const isPositive = (data?.change ?? 0) >= 0;
+  const formatPrice = (price: number | undefined) => {
+    if (!price && price !== 0) return '0.00';
     if (price < 1) return price.toFixed(4);
     if (price < 100) return price.toFixed(2);
     // Use toFixed instead of toLocaleString to prevent hydration mismatch
     return price.toFixed(2);
+  };
+
+  // Safe number formatting with fallbacks
+  const safeToFixed = (value: number | undefined, decimals: number = 2): string => {
+    if (value === undefined || value === null || isNaN(value)) {
+      return '0.00';
+    }
+    return value.toFixed(decimals);
   };
 
   return (
@@ -132,12 +141,12 @@ function PriceCard({ symbol, data, product, theme, onClick, isSelected, isLoadin
                 ) : (
                   <TrendingDown className="w-3 h-3 mr-1" />
                 )}
-                {isPositive ? '+' : ''}${Math.abs(data.change).toFixed(2)}
+                {isPositive ? '+' : ''}${safeToFixed(Math.abs(data?.change ?? 0), 2)}
               </span>
               <span className={`text-sm ${
                 isPositive ? 'text-green-500' : 'text-red-500'
               }`}>
-                ({isPositive ? '+' : ''}{data.changePercent.toFixed(2)}%)
+                ({isPositive ? '+' : ''}{safeToFixed(data?.changePercent, 2)}%)
               </span>
             </div>
           </div>
@@ -489,26 +498,26 @@ export function LivePriceFeeds({ theme, autoRefresh, refreshInterval }: LivePric
                       <div className="space-y-1">
                         <span className="text-sm text-gray-500">Current Price</span>
                         <div className="text-lg font-semibold">
-                          ${isClient ? data.price.toLocaleString() : data.price.toFixed(2)}
+                          ${isClient ? (data?.price ?? 0).toLocaleString() : safeToFixed(data?.price, 2)}
                         </div>
                       </div>
 
                       <div className="space-y-1">
                         <span className="text-sm text-gray-500">24h Change</span>
                         <div className={`text-lg font-semibold ${
-                          data.changePercent >= 0 ? 'text-green-500' : 'text-red-500'
+                          (data?.changePercent ?? 0) >= 0 ? 'text-green-500' : 'text-red-500'
                         }`}>
-                          {data.changePercent >= 0 ? '+' : ''}
-                          {data.changePercent.toFixed(2)}%
+                          {(data?.changePercent ?? 0) >= 0 ? '+' : ''}
+                          {safeToFixed(data?.changePercent, 2)}%
                         </div>
                       </div>
 
                       <div className="space-y-1">
                         <span className="text-sm text-gray-500">24h Volume</span>
                         <div className="text-lg font-semibold">
-                          {data.volume > 1000000
-                            ? `${(data.volume / 1000000).toFixed(2)}M`
-                            : `${(data.volume / 1000).toFixed(2)}K`
+                          {(data?.volume ?? 0) > 1000000
+                            ? `${safeToFixed((data?.volume ?? 0) / 1000000, 2)}M`
+                            : `${safeToFixed((data?.volume ?? 0) / 1000, 2)}K`
                           }
                         </div>
                       </div>
@@ -516,17 +525,17 @@ export function LivePriceFeeds({ theme, autoRefresh, refreshInterval }: LivePric
                       <div className="space-y-1">
                         <span className="text-sm text-gray-500">Bid/Ask</span>
                         <div className="text-lg font-semibold">
-                          ${data.bid.toFixed(2)} / ${data.ask.toFixed(2)}
+                          ${safeToFixed(data?.bid, 2)} / ${safeToFixed(data?.ask, 2)}
                         </div>
                       </div>
 
-                      {data.openInterest && (
+                      {data?.openInterest && (
                         <div className="space-y-1">
                           <span className="text-sm text-gray-500">Open Interest</span>
                           <div className="text-lg font-semibold">
-                            {data.openInterest > 1000000
-                              ? `${(data.openInterest / 1000000).toFixed(2)}M`
-                              : `${(data.openInterest / 1000).toFixed(2)}K`
+                            {(data.openInterest ?? 0) > 1000000
+                              ? `${safeToFixed((data.openInterest ?? 0) / 1000000, 2)}M`
+                              : `${safeToFixed((data.openInterest ?? 0) / 1000, 2)}K`
                             }
                           </div>
                         </div>

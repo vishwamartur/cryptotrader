@@ -72,7 +72,7 @@ export function MLPredictionsFeed({
             allPredictions.push(...data.data);
           }
         } catch (err) {
-          console.error(`Failed to fetch predictions for ${symbol}:`, err);
+          console.error('Failed to fetch predictions for %s:', symbol, err);
         }
       }
       

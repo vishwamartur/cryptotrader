@@ -1,16 +1,17 @@
 import { eq, and, desc, gte, lte, sql, ne } from 'drizzle-orm';
 import { db } from '../../database/connection';
-import { 
-  mlModels, 
-  mlPredictions, 
+import {
+  mlModels,
+  mlPredictions,
   mlTrainingJobs,
-  type MLModel, 
+  type MLModel,
   type NewMLModel,
   type MLPrediction,
   type NewMLPrediction,
   type MLTrainingJob,
   type NewMLTrainingJob
 } from '../../database/schema';
+import { pineconeService } from './pinecone-service';
 
 export class MLModelService {
   // Create a new ML model
@@ -505,6 +506,166 @@ export class MLModelService {
         .limit(validLimit);
     } catch (error) {
       console.error('Error fetching model leaderboard:', error);
+      return [];
+    }
+  }
+
+  // Vector database integration methods
+  static async storePredictionPattern(
+    modelId: string,
+    symbol: string,
+    features: number[],
+    prediction: number,
+    confidence: number
+  ): Promise<string> {
+    try {
+      const vectorId = await pineconeService.storeTradingPattern(
+        symbol,
+        'technical_indicator',
+        features,
+        {
+          modelId,
+          prediction,
+          confidence,
+          source: 'ml-model-prediction'
+        }
+      );
+
+      console.log(`Stored prediction pattern for model ${modelId}, symbol ${symbol}`);
+      return vectorId;
+    } catch (error) {
+      console.error('Error storing prediction pattern:', error);
+      throw error;
+    }
+  }
+
+  static async findSimilarPredictions(
+    features: number[],
+    symbol?: string,
+    topK: number = 5
+  ): Promise<any[]> {
+    try {
+      const results = await pineconeService.findSimilarPatterns(
+        features,
+        symbol,
+        'technical_indicator',
+        topK
+      );
+
+      return results.map(r => ({
+        id: r.id,
+        similarity: r.score,
+        symbol: r.metadata.symbol,
+        modelId: r.metadata.modelId,
+        prediction: r.metadata.prediction,
+        confidence: r.metadata.confidence,
+        timestamp: new Date(r.metadata.timestamp).toISOString()
+      }));
+    } catch (error) {
+      console.error('Error finding similar predictions:', error);
+      return [];
+    }
+  }
+
+  static async storeMarketRegimeFeatures(
+    regime: 'bull' | 'bear' | 'sideways' | 'volatile',
+    features: number[],
+    symbols: string[],
+    confidence: number
+  ): Promise<string> {
+    try {
+      const vectorId = await pineconeService.storeMarketRegime(
+        regime,
+        features,
+        symbols,
+        confidence
+      );
+
+      console.log(`Stored market regime ${regime} for symbols: ${symbols.join(', ')}`);
+      return vectorId;
+    } catch (error) {
+      console.error('Error storing market regime features:', error);
+      throw error;
+    }
+  }
+
+  static async findSimilarMarketConditions(
+    currentFeatures: number[],
+    topK: number = 10
+  ): Promise<any[]> {
+    try {
+      const results = await pineconeService.findSimilarMarketConditions(
+        currentFeatures,
+        topK
+      );
+
+      return results.map(r => ({
+        id: r.id,
+        similarity: r.score,
+        regime: r.metadata.regime,
+        symbols: r.metadata.symbol?.split(',') || [],
+        confidence: r.metadata.confidence,
+        timestamp: new Date(r.metadata.timestamp).toISOString()
+      }));
+    } catch (error) {
+      console.error('Error finding similar market conditions:', error);
+      return [];
+    }
+  }
+
+  // Vector database integration methods
+  static async storePredictionPattern(
+    modelId: string,
+    symbol: string,
+    features: number[],
+    prediction: number,
+    confidence: number
+  ): Promise<string> {
+    try {
+      const vectorId = await pineconeService.storeTradingPattern(
+        symbol,
+        'technical_indicator',
+        features,
+        {
+          modelId,
+          prediction,
+          confidence,
+          source: 'ml-model-prediction'
+        }
+      );
+
+      console.log(`Stored prediction pattern for model ${modelId}, symbol ${symbol}`);
+      return vectorId;
+    } catch (error) {
+      console.error('Error storing prediction pattern:', error);
+      throw error;
+    }
+  }
+
+  static async findSimilarPredictions(
+    features: number[],
+    symbol?: string,
+    topK: number = 5
+  ): Promise<any[]> {
+    try {
+      const results = await pineconeService.findSimilarPatterns(
+        features,
+        symbol,
+        'technical_indicator',
+        topK
+      );
+
+      return results.map(r => ({
+        id: r.id,
+        similarity: r.score,
+        symbol: r.metadata.symbol,
+        modelId: r.metadata.modelId,
+        prediction: r.metadata.prediction,
+        confidence: r.metadata.confidence,
+        timestamp: new Date(r.metadata.timestamp).toISOString()
+      }));
+    } catch (error) {
+      console.error('Error finding similar predictions:', error);
       return [];
     }
   }
