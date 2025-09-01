@@ -24,13 +24,18 @@ export async function GET(request: NextRequest) {
 
     const symbols = symbolsParam.split(',').map(s => s.trim().toUpperCase());
     
-    // Validate symbols
-    if (symbols.length === 0 || symbols.length > 50) {
+    // Strictly validate symbols: accept only A-Z, 0-9, and underscores, max 10 chars per symbol
+    const validSymbolPattern = /^[A-Z0-9_]{1,10}$/;
+    if (
+      symbols.length === 0 || 
+      symbols.length > 50 || 
+      symbols.some(symbol => !validSymbolPattern.test(symbol))
+    ) {
       return NextResponse.json(
         { 
           success: false, 
-          error: 'Invalid symbols count',
-          message: 'Please provide 1-50 symbols'
+          error: 'Invalid symbols',
+          message: 'Each symbol must be 1-10 characters, uppercase letters/numbers/underscore only'
         },
         { status: 400 }
       );
