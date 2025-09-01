@@ -2,8 +2,8 @@ import { render, screen } from '@testing-library/react';
 import { LivePriceFeeds } from '../live-price-feeds';
 
 // Mock the useDynamicMarketData hook
-jest.mock('@/hooks/use-dynamic-market-data', () => ({
-  useDynamicMarketData: () => ({
+jest.mock('@/hooks/use-dynamic-market-data', () => {
+  const baseReturn = {
     marketData: new Map([
       ['BTC-USD', {
         symbol: 'BTC-USD',
@@ -20,25 +20,33 @@ jest.mock('@/hooks/use-dynamic-market-data', () => ({
         timestamp: Date.now()
       }]
     ]),
-    products: new Map([
-      ['BTC-USD', {
-        id: 1,
-        symbol: 'BTC-USD',
-        description: 'Bitcoin USD',
-        productType: 'spot',
-        underlyingAsset: 'BTC',
-        quotingAsset: 'USD',
-        settlingAsset: 'USD',
-        tradingStatus: 'online',
-        state: 'active'
-      }]
-    ]),
-    connectionStatus: 'connected',
+    products: [{
+      id: 1,
+      symbol: 'BTC-USD',
+      description: 'Bitcoin USD',
+      productType: 'spot',
+      underlyingAsset: 'BTC',
+      quotingAsset: 'USD',
+      settlingAsset: 'USD',
+      tradingStatus: 'online',
+      state: 'active'
+    }],
+    subscribedSymbols: [],
+    isConnected: true,
     lastUpdate: Date.now(),
     isLoading: false,
-    error: null
-  })
-}));
+    error: null,
+    subscribe: jest.fn(),
+    unsubscribe: jest.fn(),
+    subscribeToAll: jest.fn(),
+    getMarketData: (s: string) => baseReturn.marketData.get(s) ?? null,
+    getProductsByType: (_: string) => baseReturn.products,
+    refresh: jest.fn(),
+    connect: jest.fn(),
+    disconnect: jest.fn(),
+  };
+  return { useDynamicMarketData: jest.fn().mockReturnValue(baseReturn) };
+});
 
 describe('LivePriceFeeds Component', () => {
   const defaultProps = {
@@ -67,8 +75,8 @@ describe('LivePriceFeeds Component', () => {
 
   it('should handle undefined changePercent gracefully', () => {
     // Mock data with undefined changePercent
-    const mockHook = require('@/hooks/use-dynamic-market-data');
-    mockHook.useDynamicMarketData.mockReturnValue({
+    const { useDynamicMarketData } = require('@/hooks/use-dynamic-market-data');
+    (useDynamicMarketData as jest.Mock).mockReturnValue({
       marketData: new Map([
         ['BTC-USD', {
           symbol: 'BTC-USD',
@@ -85,20 +93,18 @@ describe('LivePriceFeeds Component', () => {
           timestamp: Date.now()
         }]
       ]),
-      products: new Map([
-        ['BTC-USD', {
-          id: 1,
-          symbol: 'BTC-USD',
-          description: 'Bitcoin USD',
-          productType: 'spot',
-          underlyingAsset: 'BTC',
-          quotingAsset: 'USD',
-          settlingAsset: 'USD',
-          tradingStatus: 'online',
-          state: 'active'
-        }]
-      ]),
-      connectionStatus: 'connected',
+      products: [{
+        id: 1,
+        symbol: 'BTC-USD',
+        description: 'Bitcoin USD',
+        productType: 'spot',
+        underlyingAsset: 'BTC',
+        quotingAsset: 'USD',
+        settlingAsset: 'USD',
+        tradingStatus: 'online',
+        state: 'active'
+      }],
+      isConnected: true,
       lastUpdate: Date.now(),
       isLoading: false,
       error: null
@@ -116,8 +122,8 @@ describe('LivePriceFeeds Component', () => {
   });
 
   it('should handle undefined price properties gracefully', () => {
-    const mockHook = require('@/hooks/use-dynamic-market-data');
-    mockHook.useDynamicMarketData.mockReturnValue({
+    const { useDynamicMarketData } = require('@/hooks/use-dynamic-market-data');
+    (useDynamicMarketData as jest.Mock).mockReturnValue({
       marketData: new Map([
         ['BTC-USD', {
           symbol: 'BTC-USD',
@@ -134,20 +140,18 @@ describe('LivePriceFeeds Component', () => {
           timestamp: Date.now()
         }]
       ]),
-      products: new Map([
-        ['BTC-USD', {
-          id: 1,
-          symbol: 'BTC-USD',
-          description: 'Bitcoin USD',
-          productType: 'spot',
-          underlyingAsset: 'BTC',
-          quotingAsset: 'USD',
-          settlingAsset: 'USD',
-          tradingStatus: 'online',
-          state: 'active'
-        }]
-      ]),
-      connectionStatus: 'connected',
+      products: [{
+        id: 1,
+        symbol: 'BTC-USD',
+        description: 'Bitcoin USD',
+        productType: 'spot',
+        underlyingAsset: 'BTC',
+        quotingAsset: 'USD',
+        settlingAsset: 'USD',
+        tradingStatus: 'online',
+        state: 'active'
+      }],
+      isConnected: true,
       lastUpdate: Date.now(),
       isLoading: false,
       error: null

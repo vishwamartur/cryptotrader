@@ -59,9 +59,15 @@ export function ClientBody({ children }: ClientBodyProps) {
     }
     
     // Run after a short delay to ensure DOM is ready
-    const timeoutId = setTimeout(handleExtensionAttributes, 100)
-    
-    return () => clearTimeout(timeoutId)
+    let dispose: (() => void) | undefined
+    const timeoutId = setTimeout(() => {
+      dispose = handleExtensionAttributes()
+    }, 100)
+
+    return () => {
+      clearTimeout(timeoutId)
+      dispose?.()
+    }
   }, [])
 
   return <>{children}</>

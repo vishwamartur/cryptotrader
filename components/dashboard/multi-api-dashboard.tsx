@@ -24,9 +24,9 @@ import {
 
 interface APIStatus {
   name: string;
-  status: 'healthy' | 'degraded' | 'critical';
-  responseTime: number;
-  lastCheck: string;
+  status: 'healthy' | 'degraded' | 'unhealthy' | 'not_configured';
+  responseTime?: number;
+  lastChecked: string;
 }
 
 interface PriceData {
@@ -102,9 +102,8 @@ export function MultiAPIDashboard() {
       if (data.success) {
         const providers = Object.entries(data.data.detailed?.priceProviders?.health || {}).map(([name, healthy]) => ({
           name,
-          status: healthy ? 'healthy' : 'critical',
-          responseTime: Math.floor(Math.random() * 200) + 50,
-          lastCheck: new Date().toISOString()
+          status: healthy ? 'healthy' as const : 'unhealthy' as const,
+          lastChecked: new Date().toISOString()
         }));
         setApiStatus(providers as APIStatus[]);
       }

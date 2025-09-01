@@ -181,10 +181,37 @@ export class CryptoAPIManager {
     this.rateLimiters.set(provider.name, { count: 0, resetTime: Date.now() + 60000 });
   }
 
+  private validateProviderUrl(baseUrl: string): boolean {
+    try {
+      const parsedUrl = new URL(baseUrl);
+      // Only allow HTTPS URLs to trusted crypto API domains
+      const allowedDomains = [
+        'api.coingecko.com',
+        'api.coincap.io',
+        'api.coinpaprika.com',
+        'api.cryptonator.com',
+        'pro-api.coinmarketcap.com',
+        'min-api.cryptocompare.com',
+        'api.nomics.com',
+        'rest.coinapi.io'
+      ];
+
+      return parsedUrl.protocol === 'https:' &&
+             allowedDomains.includes(parsedUrl.hostname);
+    } catch {
+      return false;
+    }
+  }
+
   private async makeRequest(providerName: string, endpoint: string, params: Record<string, any> = {}): Promise<any> {
     const provider = this.providers.get(providerName);
     if (!provider || !provider.isActive) {
       throw new Error(`Provider ${providerName} not available`);
+    }
+
+    // Validate provider URL to prevent SSRF attacks
+    if (!this.validateProviderUrl(provider.baseUrl)) {
+      throw new Error(`Invalid or unauthorized provider URL: ${provider.baseUrl}`);
     }
 
     // Check rate limit
