@@ -19,11 +19,13 @@ jest.mock('@/hooks/use-realtime-data', () => ({
 
 describe('SystemHealth Component', () => {
   beforeEach(() => {
+    jest.useFakeTimers();
     // Mock Date.now to ensure consistent testing
     jest.spyOn(Date, 'now').mockImplementation(() => new Date('2024-01-01T12:00:00Z').getTime());
   });
 
   afterEach(() => {
+    jest.useRealTimers();
     jest.restoreAllMocks();
   });
 

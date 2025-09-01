@@ -290,10 +290,13 @@ function calculateRelevanceScore(article: any, keywords: string[]): number {
   
   keywords.forEach(keyword => {
     const keywordLower = keyword.toLowerCase();
-    const safeKeyword = _.escapeRegExp(keywordLower);
-    const titleMatches = (article.title.toLowerCase().match(new RegExp(safeKeyword, 'g')) || []).length;
-    const descMatches = (article.description.toLowerCase().match(new RegExp(safeKeyword, 'g')) || []).length;
-    
+    const titleText = article.title.toLowerCase();
+    const descText = article.description.toLowerCase();
+
+    // Use safe string matching instead of RegExp to prevent injection
+    const titleMatches = (titleText.split(keywordLower).length - 1);
+    const descMatches = (descText.split(keywordLower).length - 1);
+
     score += titleMatches * 3 + descMatches; // Title matches weighted higher
   });
   
