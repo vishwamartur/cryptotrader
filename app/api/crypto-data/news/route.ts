@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cryptoAPIManager } from '@/lib/crypto-apis/api-manager';
+import _ from 'lodash';
 
 /**
  * GET /api/crypto-data/news
@@ -289,8 +290,9 @@ function calculateRelevanceScore(article: any, keywords: string[]): number {
   
   keywords.forEach(keyword => {
     const keywordLower = keyword.toLowerCase();
-    const titleMatches = (article.title.toLowerCase().match(new RegExp(keywordLower, 'g')) || []).length;
-    const descMatches = (article.description.toLowerCase().match(new RegExp(keywordLower, 'g')) || []).length;
+    const safeKeyword = _.escapeRegExp(keywordLower);
+    const titleMatches = (article.title.toLowerCase().match(new RegExp(safeKeyword, 'g')) || []).length;
+    const descMatches = (article.description.toLowerCase().match(new RegExp(safeKeyword, 'g')) || []).length;
     
     score += titleMatches * 3 + descMatches; // Title matches weighted higher
   });
