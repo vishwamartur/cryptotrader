@@ -89,7 +89,8 @@
     "tailwindcss-animate": "^1.0.7",
     "tsx": "^4.20.5",
     "vaul": "^1.0.0",
-    "zod": "3.25.67"
+    "zod": "3.25.67",
+    "lodash": "^4.17.21"
   },
   "overrides": {
     "esbuild": "^0.25.9"
