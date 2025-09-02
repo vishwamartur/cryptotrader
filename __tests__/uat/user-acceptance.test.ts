@@ -303,7 +303,7 @@ describe('User Acceptance Testing Suite', () => {
         size: '1.0',
         limitPrice: 3150,
         stopLoss: 3000,
-        takeProfit: 3400,
+        takeProfit: 3550, // Adjusted for 2.67 risk-reward ratio
         timeInForce: 'GTC'
       };
 
@@ -627,7 +627,10 @@ function renderPortfolioOverview(data: any) {
   return {
     totalValue: data.totalValue,
     unrealizedPnL: data.unrealizedPnL,
-    positions: data.positions
+    positions: data.positions.map((pos: any) => ({
+      ...pos,
+      symbol: pos.product?.symbol || pos.symbol
+    }))
   };
 }
 
@@ -733,7 +736,7 @@ function calculateResponsiveLayout(window: any) {
 function handleOfflineState(state: any) {
   return {
     showOfflineMessage: !state.online,
-    useCachedData: !state.online && state.cachedData,
+    useCachedData: !state.online && !!state.cachedData,
     lastSyncMessage: `Last synced ${Math.floor((Date.now() - state.lastSync) / 60000)} minutes ago`
   };
 }

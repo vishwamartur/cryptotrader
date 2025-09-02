@@ -279,7 +279,7 @@ describe('Performance Testing Suite', () => {
       console.log(`Memory increase: ${memoryIncrease.toFixed(2)}MB`);
     });
 
-    test('should handle memory cleanup after operations', () => {
+    test('should handle memory cleanup after operations', async () => {
       const initialMemory = getMemoryUsage();
       
       // Perform memory-intensive operations
