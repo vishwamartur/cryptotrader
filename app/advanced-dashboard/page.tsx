@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 
 // Import dashboard components
+import { Navigation } from '@/components/navigation';
 import { LivePriceFeeds } from '@/components/dashboard/live-price-feeds';
 import { PortfolioTracker } from '@/components/dashboard/portfolio-tracker';
 import { TradingPositions } from '@/components/dashboard/trading-positions';
@@ -345,23 +346,19 @@ export default function AdvancedDashboard() {
         ? 'bg-gray-900 text-white' 
         : 'bg-gray-50 text-gray-900'
     }`}>
-      {/* Header */}
-      <header className={`sticky top-0 z-50 border-b backdrop-blur-sm ${
-        layout.theme === 'dark' 
-          ? 'bg-gray-900/80 border-gray-800' 
+      {/* Navigation */}
+      <Navigation theme={layout.theme} connectionStatus={connectionStatus} />
+
+      {/* Dashboard Controls */}
+      <div className={`sticky top-16 z-40 border-b backdrop-blur-sm ${
+        layout.theme === 'dark'
+          ? 'bg-gray-900/80 border-gray-800'
           : 'bg-white/80 border-gray-200'
       }`}>
         <div className="container mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
-              <h1 className="text-2xl font-bold">CryptoTrader Dashboard</h1>
-              <Badge variant={connectionStatus === 'connected' ? 'default' : 'destructive'}>
-                {connectionStatus === 'connected' ? (
-                  <><Wifi className="w-3 h-3 mr-1" /> Connected</>
-                ) : (
-                  <><WifiOff className="w-3 h-3 mr-1" /> {connectionStatus}</>
-                )}
-              </Badge>
+              <h2 className="text-lg font-semibold">Advanced Dashboard</h2>
               <span className="text-sm text-gray-500">
                 Last update: {clientTimeString || 'Loading...'}
               </span>
@@ -422,7 +419,7 @@ export default function AdvancedDashboard() {
             </div>
           </div>
         </div>
-      </header>
+      </div>
 
       {/* Main Dashboard */}
       <main className="container mx-auto px-4 py-6">
