@@ -297,9 +297,9 @@ export class PositionManager {
   private calculateRiskScore(position: ManagedPosition | Trade): number {
     // Simple risk scoring based on position size and volatility
     const marketData = this.marketData.get(position.symbol)
-    const volatility = marketData ? Math.abs(marketData.change24h) : 5
+    const volatility = marketData ? Math.abs(marketData.change) : 5
 
-    const positionValue = position.size * (position.executedPrice || position.price || 0)
+    const positionValue = position.size * (('executedPrice' in position ? position.executedPrice : 0) || ('price' in position ? (position as any).price : 0) || 0)
     const portfolioPercentage = (positionValue / this.portfolioValue) * 100
 
     // Risk score from 1-10 (10 being highest risk)
@@ -331,17 +331,22 @@ export class PositionManager {
     const largestPosition = positionValues.length > 0 ? Math.max(...positionValues) : 0
 
     const concentration = largestPosition / totalValue
-    const portfolioRisk = this.riskManager.calculatePortfolioRisk(
-      openPositions.map((p) => ({
-        symbol: p.symbol,
-        side: p.side,
-        size: p.size,
-        entryPrice: p.entryPrice,
-        stopLoss: p.entryPrice * 0.95, // Assume 5% stop loss
-        unrealizedPnl: p.unrealizedPnL,
-      })),
-      totalValue,
-    )
+    // Calculate portfolio risk using public method
+    const mockPositions: any[] = openPositions.map((p) => ({
+      user_id: 1,
+      size: p.size.toString(),
+      entry_price: p.entryPrice.toString(),
+      margin: "0",
+      liquidation_price: "0",
+      bankruptcy_price: "0",
+      adl_level: 0,
+      auto_topup: false,
+      realized_pnl: p.unrealizedPnL.toString(),
+      realized_funding: "0",
+      product: { symbol: p.symbol, description: p.symbol }
+    }));
+
+    const portfolioRisk = this.riskManager.getRiskMetrics(mockPositions, totalValue).portfolioRisk || 0;
 
     return {
       totalValue,

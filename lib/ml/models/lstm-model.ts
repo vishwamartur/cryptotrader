@@ -47,10 +47,10 @@ export class LSTMModel {
   constructor(config: LSTMConfig) {
     // Initialize TensorFlow.js when creating model
     initTensorFlow();
-    this.config = {
+    const defaultConfig = {
       sequenceLength: 24, // 24 hours of data
       features: [
-        'price', 'volume', 'sma_5', 'sma_20', 'rsi_14', 'macd', 
+        'price', 'volume', 'sma_5', 'sma_20', 'rsi_14', 'macd',
         'bb_upper', 'bb_lower', 'atr_14', 'price_momentum_1h'
       ],
       hiddenUnits: [50, 30],
@@ -60,8 +60,9 @@ export class LSTMModel {
       epochs: 100,
       validationSplit: 0.2,
       predictionHorizon: 1,
-      ...config
     };
+
+    this.config = { ...defaultConfig, ...config };
   }
 
   // Build LSTM model architecture

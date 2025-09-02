@@ -56,11 +56,12 @@ export class EnhancedAPIClient {
   private readonly cache: Map<string, { data: any; timestamp: number; ttl: number }> = new Map();
 
   constructor(config: APIClientConfig) {
-    this.config = {
+    const defaultConfig = {
       timeout: 30000,
       enableMetrics: true,
-      ...config
     };
+
+    this.config = { ...defaultConfig, ...config };
 
     this.logger = getLogger();
     this.rateLimiter = new RateLimiter(

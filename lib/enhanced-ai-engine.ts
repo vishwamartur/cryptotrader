@@ -158,7 +158,7 @@ export class EnhancedAIEngine {
     const older = volumes.slice(-10, -5)
     const recentAvg = recent.length ? recent.reduce((s, v) => s + v, 0) / recent.length : 0
     const olderAvg = older.length ? older.reduce((s, v) => s + v, 0) / older.length : recentAvg
-    const trend = recentAvg >= olderAvg ? "INCREASING" : "DECREASING"
+    const trend = recentAvg >= olderAvg ? "INCREASING" as const : "DECREASING" as const
     const denom = olderAvg === 0 ? Math.max(1, recentAvg) : olderAvg
     const strength = Math.min(1, Math.abs(recentAvg - olderAvg) / denom)
     return { trend, strength }
@@ -189,16 +189,16 @@ export class EnhancedAIEngine {
 
     const overallRisk =
       volatility > 0.3 || correlation > 0.8 || liquidityRisk > 0.7
-        ? "HIGH"
+        ? "HIGH" as const
         : volatility > 0.15 || correlation > 0.6 || liquidityRisk > 0.4
-          ? "MEDIUM"
-          : "LOW"
+          ? "MEDIUM" as const
+          : "LOW" as const
 
     return { volatility, correlation, liquidityRisk, overallRisk }
   }
 
   private calculateVolatility(marketData: MarketData[]): number {
-    const changes = marketData.map((d) => d.change24h / 100)
+    const changes = marketData.map((d) => d.change / 100)
     const avgChange = changes.reduce((sum, c) => sum + c, 0) / changes.length
     const variance = changes.reduce((sum, c) => sum + Math.pow(c - avgChange, 2), 0) / changes.length
     return Math.sqrt(variance)

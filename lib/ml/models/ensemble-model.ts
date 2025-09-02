@@ -38,16 +38,21 @@ export class EnsembleModel {
   private modelWeights: { [key: string]: number };
 
   constructor(config: EnsembleConfig) {
-    this.config = {
+    const defaultConfig = {
       models: {
         lstm: { weight: 0.4, config: {} },
         randomForest: { weight: 0.25, config: {} },
         xgboost: { weight: 0.25, config: {} },
         svm: { weight: 0.1, config: {} },
       },
-      votingStrategy: 'weighted',
+      votingStrategy: 'weighted' as const,
       confidenceThreshold: 0.6,
-      ...config
+    };
+
+    this.config = {
+      ...defaultConfig,
+      ...config,
+      models: { ...defaultConfig.models, ...config.models }
     };
 
     this.modelWeights = {

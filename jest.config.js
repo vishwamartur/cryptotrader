@@ -22,7 +22,7 @@ const baseConfig = {
       }
     }]
   },
-  moduleNameMapping: {
+  moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
   },
   setupFilesAfterEnv: ['<rootDir>/__tests__/jest.setup.js'],
