@@ -58,6 +58,7 @@ import { AlertsNotifications } from "@/components/dashboard/alerts-notifications
 import { QuickActions } from "@/components/dashboard/quick-actions"
 import { MLModelsOverview } from "@/components/dashboard/ml-models-overview"
 import { MLPredictionsFeed } from "@/components/dashboard/ml-predictions-feed"
+import { APIPerformanceMonitor } from "@/components/dashboard/api-performance-monitor"
 
 gsap.registerPlugin(ScrollTrigger)
 
@@ -506,7 +507,7 @@ export function EnhancedUnifiedDashboard() {
             </div>
 
             {/* Fourth Row - Monitoring and Analytics */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card className="trading-card">
                 <CardHeader>
                   <CardTitle>Trade Monitor</CardTitle>
@@ -524,6 +525,15 @@ export function EnhancedUnifiedDashboard() {
                   <PerformanceCharts theme={layout.theme} autoRefresh={layout.autoRefresh} refreshInterval={layout.refreshInterval} />
                 </CardContent>
               </Card>
+            </div>
+
+            {/* Fifth Row - API Performance and System Health */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <APIPerformanceMonitor
+                theme={layout.theme}
+                autoRefresh={layout.autoRefresh}
+                refreshInterval={layout.refreshInterval}
+              />
 
               <Card className="trading-card">
                 <CardHeader>
