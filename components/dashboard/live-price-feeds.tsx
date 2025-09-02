@@ -1,6 +1,14 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+
+// Utility function for safe number formatting
+const safeToFixed = (value: number | null | undefined, decimals: number = 2): string => {
+  if (value === null || value === undefined || isNaN(value)) {
+    return '0.00'
+  }
+  return value.toFixed(decimals)
+}
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';

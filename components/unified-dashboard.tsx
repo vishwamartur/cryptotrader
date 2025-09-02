@@ -439,7 +439,7 @@ export function UnifiedDashboard() {
                       <OrderExecution theme={layout.theme} autoRefresh={layout.autoRefresh} refreshInterval={layout.refreshInterval} />
                     </div>
                     <div className="trading-card">
-                      <DeltaConnectionStatus theme={layout.theme} autoRefresh={layout.autoRefresh} refreshInterval={layout.refreshInterval} />
+                      <DeltaConnectionStatus />
                     </div>
                     <div className="lg:col-span-2 trading-card">
                       <AlertsNotifications theme={layout.theme} alerts={alerts} onDismiss={(id) => setAlerts(prev => prev.filter(a => a.id !== id))} />

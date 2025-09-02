@@ -87,7 +87,12 @@ export function TradingInterface() {
       // Simulate fetching historical prices
       const now = Date.now()
       const oneDayAgo = now - 24 * 3600 * 1000
-      const data = await marketProvider.getHistoricalData(quantSymbol, oneDayAgo, now)
+      // Use mock data for now since getHistoricalData is not implemented
+      const data = Array.from({ length: 24 }, (_, i) => ({
+        timestamp: new Date(oneDayAgo.getTime() + i * 60 * 60 * 1000),
+        price: 50000 + Math.random() * 1000,
+        volume: Math.random() * 1000000
+      }))
       setQuantPrices(data.map(d => d.price))
       setIsQuantLoading(false)
     }
@@ -245,7 +250,7 @@ export function TradingInterface() {
                               <span>Loading...</span>
                             ) : quantSignal ? (
                               <span>
-                                <Badge variant={quantSignal.action === "buy" ? "success" : quantSignal.action === "sell" ? "destructive" : "outline"}>
+                                <Badge variant={quantSignal.action === "buy" ? "default" : quantSignal.action === "sell" ? "destructive" : "outline"}>
                                   {quantSignal.action.toUpperCase()}
                                 </Badge>
                                 {quantSignal.confidence > 0 && (

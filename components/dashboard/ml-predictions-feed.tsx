@@ -267,8 +267,8 @@ export function MLPredictionsFeed({
                       {prediction.accuracy !== undefined && (
                         <div>
                           <div className="text-xs text-gray-500">Accuracy</div>
-                          <div className={`font-semibold ${getConfidenceColor(prediction.accuracy)}`}>
-                            {(prediction.accuracy * 100).toFixed(1)}%
+                          <div className={`font-semibold ${getConfidenceColor(prediction.accuracy || 0)}`}>
+                            {((prediction.accuracy || 0) * 100).toFixed(1)}%
                           </div>
                         </div>
                       )}

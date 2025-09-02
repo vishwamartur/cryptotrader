@@ -11,7 +11,9 @@ export function usePortfolioOptimizer() {
   const [error, setError] = useState<string | null>(null)
 
   const { marketData } = useMarketData()
-  const { positions, balance } = usePortfolio()
+  const { portfolioData } = usePortfolio(null)
+  const positions = portfolioData?.positions || []
+  const balance = portfolioData?.balance || { total: 0, available: 0, reserved: 0 }
 
   const optimizePortfolio = async (constraints?: {
     maxPositionWeight?: number
