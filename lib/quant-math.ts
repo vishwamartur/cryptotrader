@@ -208,3 +208,70 @@ export function calmarRatio(returns: number[], prices: number[]): number {
   const maxDD = maxDrawdown(prices);
   return annualizedReturn / maxDD;
 }
+
+// MACD (Moving Average Convergence Divergence)
+export function macd(prices: number[], fastPeriod: number = 12, slowPeriod: number = 26, signalPeriod: number = 9): {
+  macd: number[];
+  signal: number[];
+  histogram: number[];
+} {
+  const fastEMA = ema(prices, fastPeriod);
+  const slowEMA = ema(prices, slowPeriod);
+
+  const macdLine: number[] = [];
+  const startIndex = Math.max(fastPeriod, slowPeriod) - 1;
+
+  for (let i = startIndex; i < prices.length; i++) {
+    const fastIndex = i - (slowPeriod - fastPeriod);
+    if (fastIndex >= 0 && i < slowEMA.length && fastIndex < fastEMA.length) {
+      macdLine.push(fastEMA[fastIndex] - slowEMA[i]);
+    }
+  }
+
+  const signalLine = ema(macdLine, signalPeriod);
+  const histogram: number[] = [];
+
+  for (let i = 0; i < Math.min(macdLine.length, signalLine.length); i++) {
+    histogram.push(macdLine[i] - signalLine[i]);
+  }
+
+  return {
+    macd: macdLine,
+    signal: signalLine,
+    histogram: histogram
+  };
+}
+
+// Stochastic Oscillator
+export function stochastic(highs: number[], lows: number[], closes: number[], kPeriod: number = 14, dPeriod: number = 3): number[] {
+  const kValues: number[] = [];
+
+  for (let i = kPeriod - 1; i < closes.length; i++) {
+    const periodHighs = highs.slice(i - kPeriod + 1, i + 1);
+    const periodLows = lows.slice(i - kPeriod + 1, i + 1);
+
+    const highestHigh = Math.max(...periodHighs);
+    const lowestLow = Math.min(...periodLows);
+
+    const kValue = ((closes[i] - lowestLow) / (highestHigh - lowestLow)) * 100;
+    kValues.push(kValue);
+  }
+
+  // Apply D period smoothing
+  return sma(kValues, dPeriod);
+}
+
+// Average True Range
+export function atr(highs: number[], lows: number[], closes: number[], period: number = 14): number[] {
+  const trueRanges: number[] = [];
+
+  for (let i = 1; i < closes.length; i++) {
+    const tr1 = highs[i] - lows[i];
+    const tr2 = Math.abs(highs[i] - closes[i - 1]);
+    const tr3 = Math.abs(lows[i] - closes[i - 1]);
+
+    trueRanges.push(Math.max(tr1, tr2, tr3));
+  }
+
+  return sma(trueRanges, period);
+}
