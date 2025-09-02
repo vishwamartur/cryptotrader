@@ -155,43 +155,61 @@ describe('UnifiedDashboard', () => {
   });
 
   describe('View Switching', () => {
-    it('should switch between home and advanced views', async () => {
+    it('should switch between different dashboard views', async () => {
       mockLocalStorage.getItem.mockImplementation((key) => {
         if (key === 'dashboard-welcome-dismissed') return 'true';
         return null;
       });
-      
+
       render(<UnifiedDashboard />);
-      
-      // Should start in home view
+
+      // Should start in overview view
       expect(screen.getByTestId('market-overview')).toBeInTheDocument();
       expect(screen.getByTestId('portfolio')).toBeInTheDocument();
-      
-      // Switch to advanced view
-      const advancedButton = screen.getByText('Advanced');
-      fireEvent.click(advancedButton);
-      
+
+      // Switch to trading view
+      const tradingButton = screen.getByText('Trading');
+      fireEvent.click(tradingButton);
+
       await waitFor(() => {
-        expect(screen.getByText('Real-time')).toBeInTheDocument();
-        expect(screen.getByText('Monitoring')).toBeInTheDocument();
-        expect(screen.getByText('Analytics')).toBeInTheDocument();
-        expect(screen.getByText('Controls')).toBeInTheDocument();
+        expect(screen.getByTestId('trading-interface')).toBeInTheDocument();
+        expect(screen.getByTestId('ai-trading-panel')).toBeInTheDocument();
+      });
+
+      // Switch to analytics view
+      const analyticsButton = screen.getByText('Analytics');
+      fireEvent.click(analyticsButton);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('live-price-feeds')).toBeInTheDocument();
       });
     });
 
-    it('should show correct components in home view', () => {
+    it('should show correct components in overview view', () => {
       mockLocalStorage.getItem.mockImplementation((key) => {
         if (key === 'dashboard-welcome-dismissed') return 'true';
         return null;
       });
-      
+
       render(<UnifiedDashboard />);
-      
+
       expect(screen.getByTestId('market-overview')).toBeInTheDocument();
       expect(screen.getByTestId('portfolio')).toBeInTheDocument();
-      expect(screen.getByTestId('ai-trading-panel')).toBeInTheDocument();
+      expect(screen.getByTestId('live-price-feeds')).toBeInTheDocument();
       expect(screen.getByTestId('risk-dashboard')).toBeInTheDocument();
-      expect(screen.getByTestId('trading-interface')).toBeInTheDocument();
+      expect(screen.getByTestId('system-health')).toBeInTheDocument();
+    });
+
+    it('should accept initial view parameter', () => {
+      mockLocalStorage.getItem.mockImplementation((key) => {
+        if (key === 'dashboard-welcome-dismissed') return 'true';
+        return null;
+      });
+
+      render(<UnifiedDashboard initialView="analytics" />);
+
+      // Should start in analytics view
+      expect(screen.getByTestId('live-price-feeds')).toBeInTheDocument();
     });
   });
 
