@@ -742,7 +742,7 @@ export class PortfolioOptimizer {
   }
 
   private calculateAnnualizedReturn(positions: Position[]): number {
-    const totalPnL = positions.reduce((sum, pos) => sum + (pos.unrealizedPnl || 0), 0)
+    const totalPnL = positions.reduce((sum, pos) => sum + (parseFloat(pos.realized_pnl || "0")), 0)
     // This is simplified - in practice, you'd use time-weighted returns
     return (totalPnL * 365) / 30 // Assuming 30-day period
   }

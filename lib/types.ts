@@ -79,6 +79,10 @@ export interface Position {
   realized_pnl: string
   realized_funding: string
   product: Product
+  // Optional fields for test data and extended functionality
+  unrealized_pnl?: string
+  mark_price?: string
+  id?: string
 }
 
 export interface Order {

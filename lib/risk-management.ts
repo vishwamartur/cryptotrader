@@ -323,8 +323,10 @@ export class RiskManager {
     try {
       // Calculate unrealized and realized PnL with proper error handling
       const unrealizedPnL = positions.reduce((total, position) => {
-        if (!position || !position.unrealized_pnl) return total;
-        const unrealized = parseFloat(position.unrealized_pnl);
+        if (!position) return total;
+        // Use unrealized_pnl if available (for test data), otherwise use realized_pnl
+        const unrealizedValue = position.unrealized_pnl || position.realized_pnl || "0";
+        const unrealized = parseFloat(unrealizedValue);
         return total + (isNaN(unrealized) ? 0 : unrealized);
       }, 0);
 

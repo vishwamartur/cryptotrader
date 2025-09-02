@@ -282,7 +282,7 @@ export class TakeProfitSystem {
     const marketData = this.marketData.get(position.symbol)
     if (!marketData) return
 
-    const volatility = Math.abs(marketData.change24h)
+    const volatility = Math.abs(marketData.change)
 
     // Adjust trailing distances based on volatility
     for (const level of position.strategy.levels) {
