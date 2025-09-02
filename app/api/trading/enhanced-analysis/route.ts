@@ -6,10 +6,12 @@ import { AdvancedMarketAnalyzer } from '@/lib/advanced-market-analyzer';
 import { MLTradingEngine } from '@/lib/ml-trading-engine';
 import { EnhancedStrategyEngine } from '@/lib/enhanced-strategy-engine';
 import { ProfitOptimizer } from '@/lib/profit-optimizer';
+import { withPerformanceMonitoring, trackDatabaseQuery, trackExternalAPICall } from '@/lib/monitoring/performance-middleware';
 
-export async function POST(request: NextRequest) {
-  try {
-    const { marketData, symbol, timeframe, riskProfile, balance } = await request.json();
+export const POST = withPerformanceMonitoring(
+  async (request: NextRequest) => {
+    try {
+      const { marketData, symbol, timeframe, riskProfile, balance } = await request.json();
 
     if (!marketData || marketData.length < 50) {
       return NextResponse.json(
@@ -216,7 +218,14 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+},
+{
+  endpoint: '/api/trading/enhanced-analysis',
+  isCritical: true,
+  isTradingEndpoint: true,
+  operation: 'SIGNAL_GENERATION'
 }
+)
 
 function combineAnalysisResults(
   marketSignal: any,
