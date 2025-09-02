@@ -61,7 +61,7 @@ export class AITradingEngine {
 
       // Check for stale data (older than 1 hour)
       const now = Date.now();
-      const latestTimestamp = Math.max(...marketData.map(d => d.timestamp || 0));
+      const latestTimestamp = Math.max(...marketData.map(d => (d as any).timestamp || d.lastUpdated || 0));
       const isStaleData = now - latestTimestamp > 3600000; // 1 hour
 
       if (isStaleData) {
