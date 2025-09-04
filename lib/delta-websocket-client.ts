@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
-import { generateHmacSha256 } from './crypto-utils';
+import WebSocket from 'ws';
+import crypto from 'crypto';
 
 export interface DeltaWebSocketConfig {
   apiKey?: string;
@@ -49,10 +50,10 @@ export class DeltaWebSocketClient extends EventEmitter {
   constructor(config: DeltaWebSocketConfig = {}) {
     super();
     
-    // Environment URLs
+    // Environment URLs - Official Delta Exchange WebSocket endpoints
     const environmentUrls = {
       production: 'wss://socket.india.delta.exchange',
-      testnet: 'wss://socket.testnet.deltaex.org'
+      testnet: 'wss://socket-ind.testnet.deltaex.org'
     };
 
     const environment = config.environment || 'production';
@@ -114,7 +115,12 @@ export class DeltaWebSocketClient extends EventEmitter {
         };
 
         this.ws.onmessage = (event) => {
-          this.handleMessage(event.data);
+          try {
+            const data = typeof event.data === 'string' ? event.data : event.data.toString();
+            this.handleMessage(data);
+          } catch (error) {
+            console.error('[DeltaWS] Failed to process message:', error);
+          }
         };
 
         this.ws.onclose = (event) => {
@@ -166,7 +172,10 @@ export class DeltaWebSocketClient extends EventEmitter {
     try {
       const timestamp = Math.floor(Date.now() / 1000).toString();
       const message = 'GET' + timestamp + '/live';
-      const signature = await generateHmacSha256(message, this.config.apiSecret);
+      const signature = crypto
+        .createHmac('sha256', this.config.apiSecret)
+        .update(message)
+        .digest('hex');
 
       const authMessage = {
         type: 'auth',

@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Proxy Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .status.connected {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.connecting {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        .log {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin: 20px 0;
+        }
+        .stat-card {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            border: 1px solid #dee2e6;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #007bff;
+        }
+        .stat-label {
+            font-size: 14px;
+            color: #6c757d;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 WebSocket Proxy Test</h1>
+        <p>This page tests the server-side WebSocket proxy implementation for Delta Exchange.</p>
+        
+        <div id="status" class="status disconnected">Disconnected</div>
+        
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-value" id="messagesReceived">0</div>
+                <div class="stat-label">Messages Received</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="connectionTime">0s</div>
+                <div class="stat-label">Connection Time</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="lastMessageTime">Never</div>
+                <div class="stat-label">Last Message</div>
+            </div>
+        </div>
+        
+        <div>
+            <button id="connectBtn" onclick="connect()">Connect to Proxy</button>
+            <button id="disconnectBtn" onclick="disconnect()" disabled>Disconnect</button>
+            <button onclick="subscribe()">Subscribe to Channels</button>
+            <button onclick="clearLog()">Clear Log</button>
+        </div>
+        
+        <h3>Connection Log</h3>
+        <div id="log" class="log"></div>
+    </div>
+
+    <script>
+        let eventSource = null;
+        let messagesReceived = 0;
+        let connectionStartTime = null;
+        let connectionTimer = null;
+
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logElement = document.getElementById('log');
+            logElement.textContent += `[${timestamp}] ${message}\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+
+        function updateStatus(status, className) {
+            const statusElement = document.getElementById('status');
+            statusElement.textContent = status;
+            statusElement.className = `status ${className}`;
+        }
+
+        function updateStats() {
+            document.getElementById('messagesReceived').textContent = messagesReceived;
+            
+            if (connectionStartTime) {
+                const elapsed = Math.floor((Date.now() - connectionStartTime) / 1000);
+                document.getElementById('connectionTime').textContent = `${elapsed}s`;
+            }
+        }
+
+        function connect() {
+            if (eventSource) {
+                log('Already connected or connecting');
+                return;
+            }
+
+            log('🔌 Connecting to WebSocket proxy...');
+            updateStatus('Connecting...', 'connecting');
+            
+            eventSource = new EventSource('/api/websocket/delta-stream');
+            connectionStartTime = Date.now();
+            
+            // Update connection timer
+            connectionTimer = setInterval(updateStats, 1000);
+
+            eventSource.onopen = function(event) {
+                log('✅ Connected to WebSocket proxy');
+                updateStatus('Connected', 'connected');
+                document.getElementById('connectBtn').disabled = true;
+                document.getElementById('disconnectBtn').disabled = false;
+            };
+
+            eventSource.onmessage = function(event) {
+                messagesReceived++;
+                document.getElementById('lastMessageTime').textContent = new Date().toLocaleTimeString();
+                
+                try {
+                    const data = JSON.parse(event.data);
+                    log(`📨 Message: ${data.type || 'unknown'} - ${JSON.stringify(data).substring(0, 100)}...`);
+                } catch (e) {
+                    log(`📨 Raw message: ${event.data.substring(0, 100)}...`);
+                }
+                
+                updateStats();
+            };
+
+            eventSource.onerror = function(event) {
+                log('❌ Connection error occurred');
+                updateStatus('Connection Error', 'disconnected');
+                
+                if (eventSource.readyState === EventSource.CLOSED) {
+                    log('🔌 Connection closed by server');
+                    cleanup();
+                }
+            };
+        }
+
+        function disconnect() {
+            if (eventSource) {
+                log('🔌 Disconnecting from proxy...');
+                eventSource.close();
+                cleanup();
+            }
+        }
+
+        function cleanup() {
+            eventSource = null;
+            connectionStartTime = null;
+            
+            if (connectionTimer) {
+                clearInterval(connectionTimer);
+                connectionTimer = null;
+            }
+            
+            updateStatus('Disconnected', 'disconnected');
+            document.getElementById('connectBtn').disabled = false;
+            document.getElementById('disconnectBtn').disabled = true;
+        }
+
+        async function subscribe() {
+            try {
+                log('📡 Sending subscription request...');
+                
+                const response = await fetch('/api/websocket/delta-stream', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        action: 'subscribe',
+                        channels: [
+                            { name: 'ticker', symbols: ['BTCUSDT', 'ETHUSDT'] },
+                            { name: 'positions' },
+                            { name: 'margins' }
+                        ]
+                    })
+                });
+
+                const result = await response.json();
+                
+                if (response.ok) {
+                    log(`✅ Subscription successful: ${result.message}`);
+                } else {
+                    log(`❌ Subscription failed: ${result.error}`);
+                }
+            } catch (error) {
+                log(`❌ Subscription error: ${error.message}`);
+            }
+        }
+
+        function clearLog() {
+            document.getElementById('log').textContent = '';
+        }
+
+        // Auto-connect on page load
+        window.onload = function() {
+            log('🚀 WebSocket Proxy Test Page Loaded');
+            log('Click "Connect to Proxy" to start testing');
+        };
+
+        // Cleanup on page unload
+        window.onbeforeunload = function() {
+            if (eventSource) {
+                eventSource.close();
+            }
+        };
+    </script>
+</body>
+</html>

@@ -70,11 +70,11 @@ export type DeltaWebSocketMessage =
   | { type: 'products'; data: DeltaProduct[] }
   | { type: 'subscription_success'; data: { channel: string; symbols: string[] } }
   | { type: 'subscription_error'; data: { channel: string; symbols: string[]; error: string } }
-  | { type: 'error'; data: { message: string; code?: string } }
+  | { type: 'error'; data: { message: string; code?: string; details?: string } }
   | { type: 'connected'; data: { message: string } }
   | { type: 'disconnected'; data: { message: string } }
   | { type: 'auth_success'; data: { message: string } }
-  | { type: 'auth_error'; data: { message: string } };
+  | { type: 'auth_error'; data: { message: string; details?: string } };
 
 export class DeltaWebSocketClient {
   private ws: WebSocket | null = null;
@@ -154,7 +154,9 @@ export class DeltaWebSocketClient {
       // Clear timeout when connection is established
       this.ws.onopen = (event) => {
         clearTimeout(connectionTimeout);
-        this.handleOpen();
+        this.handleOpen().catch(error => {
+          console.error('[DeltaWebSocket] Error in handleOpen:', error);
+        });
       };
 
     } catch (error) {
@@ -572,7 +574,7 @@ export class DeltaWebSocketClient {
   /**
    * Handle WebSocket open event
    */
-  private handleOpen(): void {
+  private async handleOpen(): Promise<void> {
     console.log('[DeltaWebSocket] ✅ Connected successfully');
     this.isConnecting = false;
     this.reconnectAttempts = 0;
@@ -583,7 +585,7 @@ export class DeltaWebSocketClient {
 
     // Authenticate if credentials are provided
     if (this.config.apiKey && this.config.apiSecret) {
-      this.authenticate();
+      await this.authenticate();
     } else {
       // If no authentication, discover products immediately
       this.discoverProducts().catch(error => {
@@ -1006,7 +1008,7 @@ export class DeltaWebSocketClient {
   /**
    * Authenticate with Delta Exchange
    */
-  private authenticate(): void {
+  private async authenticate(): Promise<void> {
     try {
       if (!this.config.apiKey || !this.config.apiSecret) {
         console.warn('[DeltaWebSocket] Missing API credentials, skipping authentication');
@@ -1019,13 +1021,13 @@ export class DeltaWebSocketClient {
 
       console.log('[DeltaWebSocket] Starting authentication process...');
 
-      const timestamp = Date.now().toString();
+      const timestamp = Math.floor(Date.now() / 1000).toString();
       const method = 'GET';
       const path = '/live';
       const body = '';
 
       // Generate signature for authentication
-      const signature = generateHmacSha256(
+      const signature = await generateHmacSha256(
         method + timestamp + path + body,
         this.config.apiSecret
       );

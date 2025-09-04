@@ -6,7 +6,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useDeltaWebSocket } from './use-delta-websocket';
+import { useWebSocketMarketData as useWebSocketMarketDataManager } from './use-websocket-manager';
 import { DeltaMarketData, DeltaProduct } from '@/lib/delta-websocket';
 
 export interface MarketDataItem {
@@ -45,33 +45,24 @@ export function useWebSocketMarketData(config: UseWebSocketMarketDataConfig = {}
     environment = 'production'
   } = config;
 
-  const [isInitialized, setIsInitialized] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // Use the Delta WebSocket hook with environment configuration
-  const deltaWS = useDeltaWebSocket({
+  // Use the singleton WebSocket manager
+  const manager = useWebSocketMarketDataManager({
     autoConnect,
-    reconnectAttempts: 10,
-    environment
+    subscribeToAllSymbols,
+    symbols: subscribeToMajorPairs ? ['BTCUSDT', 'ETHUSDT', 'ADAUSDT', 'DOTUSDT', 'LINKUSDT'] : undefined
   });
 
-  // Initialize subscriptions when connected and products are available
+  const [isInitialized, setIsInitialized] = useState(false);
+  const error = manager.error;
+
+  // Initialize subscriptions when connected - using new WebSocket manager
   useEffect(() => {
-    if (deltaWS.isConnected && deltaWS.products.length > 0 && !isInitialized) {
-      console.log('[useWebSocketMarketData] Initializing subscriptions...');
+    if (manager.isConnected && !isInitialized) {
+      console.log('[useWebSocketMarketData] Initializing subscriptions with WebSocket manager...');
 
       try {
-        if (subscribeToAllSymbols) {
-          console.log('[useWebSocketMarketData] 🌐 Subscribing to ALL symbols using "all" keyword');
-          deltaWS.subscribeToAllSymbols(channels);
-        } else if (subscribeToAllProducts) {
-          console.log('[useWebSocketMarketData] Subscribing to all products individually');
-          deltaWS.subscribeToAllProducts(channels);
-        } else if (subscribeToMajorPairs) {
-          console.log('[useWebSocketMarketData] Subscribing to major pairs');
-          deltaWS.subscribeToMajorPairs(channels);
-        }
-
+        // The new manager handles subscriptions automatically based on configuration
+        // No need for manual subscription calls as they're handled in the manager
         setIsInitialized(true);
         setError(null);
       } catch (err) {
@@ -79,93 +70,49 @@ export function useWebSocketMarketData(config: UseWebSocketMarketDataConfig = {}
         setError(err instanceof Error ? err.message : 'Failed to initialize subscriptions');
       }
     }
-  }, [deltaWS.isConnected, deltaWS.products.length, isInitialized, subscribeToAllSymbols, subscribeToAllProducts, subscribeToMajorPairs, channels, deltaWS]);
+  }, [manager.isConnected, isInitialized]);
 
   // Convert WebSocket market data to the expected format
   const marketData = useMemo((): MarketDataItem[] => {
-    const data: MarketDataItem[] = [];
-    
-    deltaWS.marketData.forEach((wsData: DeltaMarketData, symbol: string) => {
-      data.push({
-        symbol,
-        price: wsData.price.toString(),
-        change: wsData.change.toString(),
-        changePercent: wsData.changePercent.toString(),
-        volume: wsData.volume.toString(),
-        high: wsData.high.toString(),
-        low: wsData.low.toString(),
-        open: wsData.open?.toString(),
-        close: wsData.close?.toString(),
-        turnover: wsData.turnover?.toString(),
-        lastUpdate: new Date(wsData.timestamp),
-        product: wsData.product
-      });
-    });
-
-    // Sort by volume (descending) and limit results
-    return data
-      .sort((a, b) => parseFloat(b.volume) - parseFloat(a.volume))
-      .slice(0, maxSymbols);
-  }, [deltaWS.marketData, maxSymbols]);
+    // Use the marketDataArray from the new WebSocket manager
+    return manager.marketDataArray.slice(0, maxSymbols);
+  }, [manager.marketDataArray, maxSymbols]);
 
   // Get market data for a specific symbol
   const getMarketData = useCallback((symbol: string): MarketDataItem | null => {
-    const wsData = deltaWS.getMarketData(symbol);
+    // Find the symbol in the marketDataArray from the manager
+    const wsData = manager.marketDataArray.find(item => item.symbol === symbol);
     if (!wsData) return null;
 
-    return {
-      symbol,
-      price: wsData.price.toString(),
-      change: wsData.change.toString(),
-      changePercent: wsData.changePercent.toString(),
-      volume: wsData.volume.toString(),
-      high: wsData.high.toString(),
-      low: wsData.low.toString(),
-      open: wsData.open?.toString(),
-      close: wsData.close?.toString(),
-      turnover: wsData.turnover?.toString(),
-      lastUpdate: new Date(wsData.timestamp),
-      product: wsData.product
-    };
-  }, [deltaWS]);
+    return wsData;
+  }, [manager.marketDataArray]);
 
   // Subscribe to additional symbols
   const subscribeToSymbols = useCallback((symbols: string[], subscriptionChannels?: string[]) => {
     console.log('[useWebSocketMarketData] Subscribing to additional symbols:', symbols);
-    deltaWS.subscribe(symbols, subscriptionChannels || channels);
-  }, [deltaWS, channels]);
+    // The new manager handles subscriptions automatically
+    manager.subscribe([{ name: 'v2/ticker', symbols }]);
+  }, [manager, channels]);
 
   // Subscribe to ALL symbols using "all" keyword
   const subscribeToAllSymbolsMethod = useCallback((subscriptionChannels?: string[]) => {
     console.log('[useWebSocketMarketData] 🌐 Subscribing to ALL symbols using "all" keyword');
-    deltaWS.subscribeToAllSymbols(subscriptionChannels || channels);
-  }, [deltaWS, channels]);
+    // The new manager handles subscriptions automatically
+    manager.subscribe([{ name: 'v2/ticker' }]);
+  }, [manager, channels]);
 
   // Unsubscribe from symbols
   const unsubscribeFromSymbols = useCallback((symbols: string[], subscriptionChannels?: string[]) => {
     console.log('[useWebSocketMarketData] Unsubscribing from symbols:', symbols);
-    deltaWS.unsubscribe(symbols, subscriptionChannels || channels);
-  }, [deltaWS, channels]);
+    // The new manager doesn't have unsubscribe functionality yet
+    console.warn('[useWebSocketMarketData] Unsubscribe not implemented in new manager');
+  }, [manager, channels]);
 
   // Get products by category
-  const getProductsByCategory = useCallback((category: 'spot' | 'futures' | 'perpetual' | 'all' = 'all'): DeltaProduct[] => {
-    if (category === 'all') {
-      return deltaWS.products;
-    }
-    
-    return deltaWS.products.filter(product => {
-      switch (category) {
-        case 'spot':
-          return product.contract_type === 'spot';
-        case 'futures':
-          return product.contract_type === 'futures';
-        case 'perpetual':
-          return product.contract_type === 'perpetual_futures';
-        default:
-          return true;
-      }
-    });
-  }, [deltaWS.products]);
+  const getProductsByCategory = useCallback((category: 'spot' | 'futures' | 'perpetual' | 'all' = 'all'): any[] => {
+    // The new manager doesn't have products data yet, return empty array
+    return [];
+  }, []);
 
   // Get top performers
   const getTopPerformers = useCallback((limit: number = 10): MarketDataItem[] => {
@@ -217,9 +164,9 @@ export function useWebSocketMarketData(config: UseWebSocketMarketDataConfig = {}
       unchanged,
       totalVolume,
       avgChange,
-      lastUpdate: deltaWS.lastUpdate
+      lastUpdate: manager.lastHeartbeat
     };
-  }, [marketData, deltaWS.lastUpdate]);
+  }, [marketData, manager.lastHeartbeat]);
 
   // Create a Map structure for backward compatibility with existing components
   const marketDataMap = useMemo(() => {
@@ -245,32 +192,32 @@ export function useWebSocketMarketData(config: UseWebSocketMarketDataConfig = {}
 
   return {
     // Connection State
-    isConnected: deltaWS.isConnected,
-    isConnecting: deltaWS.isConnecting,
-    isAuthenticated: deltaWS.isAuthenticated,
-    connectionStatus: deltaWS.connectionStatus,
-    isInitialized,
-    error: error || deltaWS.error,
-    isLoading: deltaWS.isConnecting, // Add isLoading for backward compatibility
+    isConnected: manager.isConnected,
+    isConnecting: manager.isConnecting,
+    isAuthenticated: manager.isAuthenticated,
+    connectionStatus: manager.connectionStatus,
+    isInitialized: manager.isConnected,
+    error: manager.error,
+    isLoading: manager.isConnecting, // Add isLoading for backward compatibility
 
     // Data - provide both formats for compatibility
-    marketData: marketDataMap, // Map format for existing components
-    marketDataArray: marketData, // Array format for new components
-    products: deltaWS.products,
-    orderBooks: deltaWS.orderBooks,
-    trades: deltaWS.trades,
-    lastUpdate: deltaWS.lastUpdate,
+    marketData: manager.marketData, // Map format for existing components
+    marketDataArray: manager.marketDataArray, // Array format for new components
+    products: [],
+    orderBooks: manager.orderBooks,
+    trades: [],
+    lastUpdate: manager.lastHeartbeat,
 
     // Connection Actions
-    connect: deltaWS.connect,
-    disconnect: deltaWS.disconnect,
-    refresh: deltaWS.connect, // Add refresh method for backward compatibility
+    connect: manager.connect,
+    disconnect: manager.disconnect,
+    refresh: manager.connect, // Add refresh method for backward compatibility
 
     // Subscription Actions
     subscribeToSymbols,
     unsubscribeFromSymbols,
-    subscribeToAllProducts: deltaWS.subscribeToAllProducts,
-    subscribeToMajorPairs: deltaWS.subscribeToMajorPairs,
+    subscribeToAllProducts: () => console.warn('subscribeToAllProducts not implemented in new manager'),
+    subscribeToMajorPairs: () => console.warn('subscribeToMajorPairs not implemented in new manager'),
     subscribeToAllSymbols: subscribeToAllSymbolsMethod, // New: Subscribe to ALL symbols using "all" keyword
     subscribe: subscribeToSymbols, // Add subscribe alias for backward compatibility
 
@@ -284,9 +231,9 @@ export function useWebSocketMarketData(config: UseWebSocketMarketDataConfig = {}
 
     // Computed Values
     statistics,
-    subscribedSymbols: deltaWS.subscribedSymbols,
-    connectedSymbols: deltaWS.connectedSymbols,
-    totalProducts: deltaWS.totalProducts,
-    activeProducts: deltaWS.activeProducts
+    subscribedSymbols: [],
+    connectedSymbols: [],
+    totalProducts: 0,
+    activeProducts: 0
   };
 }

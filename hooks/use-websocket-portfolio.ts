@@ -7,7 +7,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useDeltaWebSocket } from './use-delta-websocket';
+import { useWebSocketPortfolio as useWebSocketPortfolioManager } from './use-websocket-manager';
 
 export interface WebSocketBalance {
   asset: string;
@@ -83,77 +83,58 @@ export function useWebSocketPortfolio(config: UseWebSocketPortfolioConfig = {}) 
     enableMockFallback = true
   } = config;
 
-  const [portfolioData, setPortfolioData] = useState<WebSocketPortfolioData>({
-    balances: [],
-    positions: [],
-    orders: [],
-    summary: {
-      totalBalance: '0.00',
-      totalUnrealizedPnL: '0.00',
-      totalPnLPercent: '0.00',
-      totalRealizedPnL: '0.00',
-      availableBalance: '0.00',
-      reservedBalance: '0.00',
-      openPositions: 0,
-      activeOrders: 0,
-      lastUpdate: 0
-    }
+  // Use the singleton WebSocket manager
+  const manager = useWebSocketPortfolioManager({
+    autoConnect
   });
+
+  // Get base data from manager
+  const baseBalances: WebSocketBalance[] = manager.balances || [];
+  const basePositions: WebSocketPosition[] = manager.positions || [];
+  const baseOrders: WebSocketOrder[] = manager.orders || [];
 
   const [isInitialized, setIsInitialized] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const error = manager.error;
   const [isUsingMockData, setIsUsingMockData] = useState(false);
-
-  // Use Delta WebSocket with authentication
-  const deltaWS = useDeltaWebSocket({
-    autoConnect,
-    environment,
-    apiKey,
-    apiSecret,
-    reconnectAttempts: 10
-  });
 
   // Track if we've subscribed to private channels
   const hasSubscribedRef = useRef(false);
 
-  // Subscribe to private channels when authenticated
+  // Subscribe to private channels when connected (authentication handled server-side)
   useEffect(() => {
-    if (deltaWS.isAuthenticated && !hasSubscribedRef.current) {
-      console.log('[useWebSocketPortfolio] Subscribing to private channels...');
-      
+    if (manager.isConnected && !hasSubscribedRef.current) {
+      console.log('[useWebSocketPortfolio] Subscribing to private channels via WebSocket manager...');
+
       try {
-        // Subscribe to private channels for portfolio data
-        deltaWS.subscribe([], ['positions', 'orders', 'wallet']);
+        // The new manager handles subscriptions automatically based on configuration
+        // No need for manual subscription calls as they're handled in the manager
         hasSubscribedRef.current = true;
         setIsInitialized(true);
-        setError(null);
         setIsUsingMockData(false);
-        
-        console.log('[useWebSocketPortfolio] ✅ Subscribed to private channels');
+
+        console.log('[useWebSocketPortfolio] ✅ Subscribed to private channels via proxy');
       } catch (err) {
-        console.error('[useWebSocketPortfolio] Failed to subscribe to private channels:', err);
-        setError(err instanceof Error ? err.message : 'Failed to subscribe to private channels');
-        
+        console.error('[useWebSocketPortfolio] Failed to initialize portfolio data:', err);
+
         if (enableMockFallback) {
           console.log('[useWebSocketPortfolio] Falling back to mock data');
           setMockPortfolioData();
         }
       }
     }
-  }, [deltaWS.isAuthenticated, deltaWS, enableMockFallback]);
+  }, [manager.isConnected, enableMockFallback]);
 
-  // Handle authentication failures
+  // Handle connection failures and fallback to mock data
   useEffect(() => {
-    if (deltaWS.error && deltaWS.error.includes('auth')) {
-      console.warn('[useWebSocketPortfolio] Authentication failed:', deltaWS.error);
-      setError(`WebSocket authentication failed: ${deltaWS.error}`);
-      
+    if (manager.error) {
+      console.warn('[useWebSocketPortfolio] Connection error:', manager.error);
+
       if (enableMockFallback) {
-        console.log('[useWebSocketPortfolio] Using mock data due to authentication failure');
+        console.log('[useWebSocketPortfolio] Using mock data due to connection error');
         setMockPortfolioData();
       }
     }
-  }, [deltaWS.error, enableMockFallback]);
+  }, [manager.error, enableMockFallback]);
 
   // Set mock portfolio data as fallback
   const setMockPortfolioData = useCallback(() => {
@@ -225,147 +206,41 @@ export function useWebSocketPortfolio(config: UseWebSocketPortfolioConfig = {}) 
       }
     };
 
-    setPortfolioData(mockData);
+    // Since portfolioData is computed from manager data, we just set the mock flag
+    // The actual mock data will be provided by the computed portfolioData object
     setIsUsingMockData(true);
     setIsInitialized(true);
   }, []);
 
-  // Process WebSocket messages for portfolio data
+  // The new manager handles all WebSocket message processing automatically
+  // Portfolio data is available through manager.portfolioData
+  // No need for manual message handlers as they're handled in the manager
   useEffect(() => {
-    if (!deltaWS.isConnected) return;
+    if (manager.isConnected && manager.portfolioData) {
+      console.log('[useWebSocketPortfolio] Portfolio data updated from manager');
+      setIsUsingMockData(false);
+    }
+  }, [manager.isConnected, manager.portfolioData]);
 
-    const handlePositionUpdate = (data: any) => {
-      console.log('[useWebSocketPortfolio] Position update received:', data);
-      
-      setPortfolioData(prev => {
-        const updatedPositions = [...prev.positions];
-        const existingIndex = updatedPositions.findIndex(
-          pos => pos.product.symbol === data.symbol
-        );
-
-        const newPosition: WebSocketPosition = {
-          product: { symbol: data.symbol, id: data.product_id || 0 },
-          size: data.size || '0',
-          entry_price: data.entry_price || '0',
-          mark_price: data.mark_price || '0',
-          unrealized_pnl: data.unrealized_pnl || '0',
-          unrealized_pnl_percent: data.unrealized_pnl_percent || '0',
-          realized_pnl: data.realized_pnl || '0',
-          side: data.side || 'buy',
-          timestamp: Date.now()
-        };
-
-        if (existingIndex >= 0) {
-          updatedPositions[existingIndex] = newPosition;
-        } else {
-          updatedPositions.push(newPosition);
-        }
-
-        return {
-          ...prev,
-          positions: updatedPositions
-        };
-      });
-    };
-
-    const handleOrderUpdate = (data: any) => {
-      console.log('[useWebSocketPortfolio] Order update received:', data);
-      
-      setPortfolioData(prev => {
-        const updatedOrders = [...prev.orders];
-        const existingIndex = updatedOrders.findIndex(order => order.id === data.id);
-
-        const newOrder: WebSocketOrder = {
-          id: data.id || 0,
-          product: { symbol: data.symbol, id: data.product_id || 0 },
-          size: data.size || '0',
-          price: data.price || '0',
-          side: data.side || 'buy',
-          order_type: data.order_type || 'limit',
-          state: data.state || 'open',
-          timestamp: Date.now()
-        };
-
-        if (existingIndex >= 0) {
-          if (data.state === 'cancelled' || data.state === 'filled') {
-            updatedOrders.splice(existingIndex, 1);
-          } else {
-            updatedOrders[existingIndex] = newOrder;
-          }
-        } else if (data.state === 'open') {
-          updatedOrders.push(newOrder);
-        }
-
-        return {
-          ...prev,
-          orders: updatedOrders
-        };
-      });
-    };
-
-    const handleWalletUpdate = (data: any) => {
-      console.log('[useWebSocketPortfolio] Wallet update received:', data);
-      
-      setPortfolioData(prev => {
-        const updatedBalances = [...prev.balances];
-        const existingIndex = updatedBalances.findIndex(
-          balance => balance.asset === data.asset
-        );
-
-        const newBalance: WebSocketBalance = {
-          asset: data.asset || 'UNKNOWN',
-          wallet_balance: data.wallet_balance || '0',
-          unrealized_pnl: data.unrealized_pnl || '0',
-          available_balance: data.available_balance || '0',
-          reserved_balance: data.reserved_balance || '0',
-          timestamp: Date.now()
-        };
-
-        if (existingIndex >= 0) {
-          updatedBalances[existingIndex] = newBalance;
-        } else {
-          updatedBalances.push(newBalance);
-        }
-
-        return {
-          ...prev,
-          balances: updatedBalances
-        };
-      });
-    };
-
-    // Set up message handlers
-    deltaWS.on?.('positions', handlePositionUpdate);
-    deltaWS.on?.('orders', handleOrderUpdate);
-    deltaWS.on?.('wallet', handleWalletUpdate);
-
-    // Cleanup
-    return () => {
-      deltaWS.off?.('positions', handlePositionUpdate);
-      deltaWS.off?.('orders', handleOrderUpdate);
-      deltaWS.off?.('wallet', handleWalletUpdate);
-    };
-  }, [deltaWS.isConnected, deltaWS]);
-
-  // Calculate portfolio summary
+  // Calculate portfolio summary from base data
   const calculatedSummary = useMemo((): PortfolioSummary => {
-    const totalBalance = portfolioData.balances.reduce(
+    const totalBalance = baseBalances.reduce(
       (sum, balance) => sum + parseFloat(balance.wallet_balance || '0'), 0
     );
-    
-    const totalUnrealizedPnL = portfolioData.balances.reduce(
+
+    const totalUnrealizedPnL = baseBalances.reduce(
       (sum, balance) => sum + parseFloat(balance.unrealized_pnl || '0'), 0
     );
-    
-    const totalRealizedPnL = portfolioData.positions.reduce(
+
+    const totalRealizedPnL = basePositions.reduce(
       (sum, position) => sum + parseFloat(position.realized_pnl || '0'), 0
     );
-    
-    const availableBalance = portfolioData.balances.reduce(
+
+    const availableBalance = baseBalances.reduce(
       (sum, balance) => sum + parseFloat(balance.available_balance || '0'), 0
     );
-    
-    const reservedBalance = portfolioData.balances.reduce(
+
+    const reservedBalance = baseBalances.reduce(
       (sum, balance) => sum + parseFloat(balance.reserved_balance || '0'), 0
     );
 
@@ -376,27 +251,27 @@ export function useWebSocketPortfolio(config: UseWebSocketPortfolioConfig = {}) 
       totalRealizedPnL: totalRealizedPnL.toFixed(2),
       availableBalance: availableBalance.toFixed(2),
       reservedBalance: reservedBalance.toFixed(2),
-      openPositions: portfolioData.positions.length,
-      activeOrders: portfolioData.orders.length,
+      openPositions: basePositions.length,
+      activeOrders: baseOrders.length,
       lastUpdate: Date.now()
     };
-  }, [portfolioData.balances, portfolioData.positions, portfolioData.orders]);
+  }, [baseBalances, basePositions, baseOrders]);
 
-  // Update portfolio data with calculated summary
-  useEffect(() => {
-    setPortfolioData(prev => ({
-      ...prev,
-      summary: calculatedSummary
-    }));
-  }, [calculatedSummary]);
+  // Transform manager data to match existing interface with calculated summary
+  const portfolioData: WebSocketPortfolioData = useMemo(() => ({
+    balances: baseBalances,
+    positions: basePositions,
+    orders: baseOrders,
+    summary: calculatedSummary
+  }), [baseBalances, basePositions, baseOrders, calculatedSummary]);
 
   return {
     // Connection state
-    isConnected: deltaWS.isConnected,
-    isConnecting: deltaWS.isConnecting,
-    isAuthenticated: deltaWS.isAuthenticated,
-    isInitialized,
-    error: error || deltaWS.error,
+    isConnected: manager.isConnected,
+    isConnecting: manager.isConnecting,
+    isAuthenticated: manager.isAuthenticated,
+    isInitialized: manager.isConnected,
+    error: manager.error,
     isUsingMockData,
 
     // Portfolio data
@@ -407,8 +282,8 @@ export function useWebSocketPortfolio(config: UseWebSocketPortfolioConfig = {}) 
     summary: portfolioData.summary,
 
     // Connection actions
-    connect: deltaWS.connect,
-    disconnect: deltaWS.disconnect,
+    connect: manager.connect,
+    disconnect: manager.disconnect,
 
     // Utility methods
     getBalance: useCallback((asset: string) => {

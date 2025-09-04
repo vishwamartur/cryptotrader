@@ -11,7 +11,8 @@ import {
   Target,
   X
 } from 'lucide-react';
-import { useRealtimeData } from '@/hooks/use-realtime-data';
+import { useWebSocketPortfolio } from '@/hooks/use-websocket-portfolio';
+import { useWebSocketMarketData } from '@/hooks/use-websocket-market-data';
 
 interface TradingPositionsProps {
   theme: 'light' | 'dark';
@@ -20,7 +21,20 @@ interface TradingPositionsProps {
 }
 
 export function TradingPositions({ theme, autoRefresh, refreshInterval }: TradingPositionsProps) {
-  const { portfolio } = useRealtimeData();
+  // Use WebSocket-based portfolio data for real-time position updates
+  const portfolio = useWebSocketPortfolio({
+    autoConnect: true,
+    environment: 'production',
+    enableMockFallback: true
+  });
+
+  // Use WebSocket-based market data for real-time pricing
+  const marketData = useWebSocketMarketData({
+    autoConnect: true,
+    subscribeToAllSymbols: true,
+    channels: ['v2/ticker']
+  });
+
   const [selectedPosition, setSelectedPosition] = useState<string | null>(null);
 
   if (!portfolio?.positions || portfolio.positions.length === 0) {

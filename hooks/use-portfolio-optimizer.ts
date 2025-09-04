@@ -2,18 +2,36 @@
 
 import { useState } from "react"
 import { portfolioOptimizer, type OptimizationResult } from "@/lib/portfolio-optimizer"
-import { useMarketData } from "./use-market-data"
-import { usePortfolio } from "./use-portfolio"
+import { useWebSocketMarketData } from "./use-websocket-market-data"
+import { useWebSocketPortfolio } from "./use-websocket-portfolio"
 
 export function usePortfolioOptimizer() {
   const [optimizationResult, setOptimizationResult] = useState<OptimizationResult | null>(null)
   const [isOptimizing, setIsOptimizing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const { marketData } = useMarketData()
-  const { portfolioData } = usePortfolio(null)
-  const positions = portfolioData?.positions || []
-  const balance = portfolioData?.balance || { total: 0, available: 0, reserved: 0 }
+  // Use WebSocket-based market data for real-time updates
+  const marketDataWS = useWebSocketMarketData({
+    autoConnect: true,
+    subscribeToAllSymbols: true,
+    channels: ['v2/ticker']
+  })
+
+  // Use WebSocket-based portfolio data for real-time updates
+  const portfolio = useWebSocketPortfolio({
+    autoConnect: true,
+    environment: 'production',
+    enableMockFallback: true
+  })
+
+  // Convert WebSocket data to expected format for backward compatibility
+  const marketData = marketDataWS.marketDataArray
+  const positions = portfolio.positions || []
+  const balance = {
+    total: parseFloat(portfolio.summary?.totalBalance || '0'),
+    available: parseFloat(portfolio.summary?.availableBalance || '0'),
+    reserved: parseFloat(portfolio.summary?.reservedBalance || '0')
+  }
 
   const optimizePortfolio = async (constraints?: {
     maxPositionWeight?: number

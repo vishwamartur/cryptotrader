@@ -18,7 +18,7 @@ import {
   XCircle,
   RefreshCw
 } from 'lucide-react';
-import { useRealtimeData } from '@/hooks/use-realtime-data';
+import { useWebSocketMarketData } from '@/hooks/use-websocket-market-data';
 
 interface AITradingSignalsProps {
   theme: 'light' | 'dark';
@@ -180,7 +180,26 @@ function SignalCard({ signal, theme, onExecute, onDismiss }: SignalCardProps) {
 }
 
 export function AITradingSignals({ theme, autoRefresh, refreshInterval }: AITradingSignalsProps) {
-  const { aiSignals, connectionStatus, lastUpdate } = useRealtimeData();
+  // Use WebSocket-based market data for real-time AI signal generation
+  const marketData = useWebSocketMarketData({
+    autoConnect: true,
+    subscribeToAllSymbols: true,
+    channels: ['v2/ticker', 'l1_orderbook']
+  });
+
+  // Mock AI signals based on real-time market data (replace with actual AI logic)
+  const aiSignals = marketData.marketDataArray.slice(0, 10).map((data, index) => ({
+    id: `signal_${index}`,
+    symbol: data.symbol,
+    type: Math.random() > 0.5 ? 'BUY' : 'SELL',
+    confidence: Math.floor(Math.random() * 40) + 60, // 60-100%
+    price: parseFloat(data.close || '0'),
+    timestamp: Date.now() - Math.random() * 3600000, // Random time in last hour
+    reason: `Technical analysis indicates ${Math.random() > 0.5 ? 'bullish' : 'bearish'} momentum`
+  }));
+
+  const connectionStatus = marketData.isConnected ? 'connected' : 'disconnected';
+  const lastUpdate = marketData.lastUpdate;
   const [filter, setFilter] = useState<'ALL' | 'BUY' | 'SELL' | 'HOLD'>('ALL');
   const [sortBy, setSortBy] = useState<'time' | 'confidence' | 'symbol'>('time');
   const [isGenerating, setIsGenerating] = useState(false);

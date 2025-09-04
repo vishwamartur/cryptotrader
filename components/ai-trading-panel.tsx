@@ -11,8 +11,8 @@ import { Switch } from "@/components/ui/switch"
 import { Separator } from "@/components/ui/separator"
 import { Brain, TrendingUp, TrendingDown, Minus, Settings, Play } from "lucide-react"
 import { useAITrading } from "@/hooks/use-ai-trading"
-import { useMarketData } from "@/hooks/use-market-data"
-import { usePortfolio } from "@/hooks/use-portfolio"
+import { useWebSocketMarketData } from "@/hooks/use-websocket-market-data"
+import { useWebSocketPortfolio } from "@/hooks/use-websocket-portfolio"
 
 export function AITradingPanel() {
   const [showConfig, setShowConfig] = useState(false)
@@ -25,8 +25,28 @@ export function AITradingPanel() {
 
   const { analysis, isAnalyzing, isConfigured, config, initializeEngine, analyzeMarket, updateConfig } = useAITrading()
 
-  const { marketData } = useMarketData()
-  const { positions, balance } = usePortfolio()
+  // Use WebSocket-based market data for real-time updates
+  const marketDataWS = useWebSocketMarketData({
+    autoConnect: true,
+    subscribeToAllSymbols: true,
+    channels: ['v2/ticker']
+  })
+
+  // Use WebSocket-based portfolio data for real-time updates
+  const portfolio = useWebSocketPortfolio({
+    autoConnect: true,
+    environment: 'production',
+    enableMockFallback: true
+  })
+
+  // Convert WebSocket data to expected format for backward compatibility
+  const marketData = marketDataWS.marketDataArray
+  const positions = portfolio.positions || []
+  const balance = {
+    total: parseFloat(portfolio.summary?.totalBalance || '0'),
+    available: parseFloat(portfolio.summary?.availableBalance || '0'),
+    reserved: parseFloat(portfolio.summary?.reservedBalance || '0')
+  }
 
   const handleConfigureAI = () => {
     if (!apiKey.trim()) {

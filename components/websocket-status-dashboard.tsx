@@ -273,7 +273,7 @@ export function WebSocketStatusDashboard() {
               <Zap className="h-8 w-8 text-green-600 mx-auto mb-2" />
               <div className="text-2xl font-bold text-green-600">90%+</div>
               <div className="text-sm text-muted-foreground">Latency Reduction</div>
-              <div className="text-xs text-muted-foreground mt-1">From 1000+ ms to <100 ms</div>
+              <div className="text-xs text-muted-foreground mt-1">From 1000+ ms to &lt;100 ms</div>
             </div>
             <div className="text-center p-4 rounded-lg border border-blue-200 bg-blue-50">
               <Clock className="h-8 w-8 text-blue-600 mx-auto mb-2" />
