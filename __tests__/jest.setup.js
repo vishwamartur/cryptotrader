@@ -30,16 +30,65 @@ global.fetch = jest.fn(() =>
   })
 );
 
-// Mock WebSocket
-global.WebSocket = jest.fn(() => ({
-  addEventListener: jest.fn(),
-  removeEventListener: jest.fn(),
-  send: jest.fn(),
-  close: jest.fn(),
-  readyState: 1,
-}));
+// Mock WebSocket with enhanced functionality for Delta Exchange WebSocket testing
+class MockWebSocket {
+  constructor(url) {
+    this.url = url;
+    this.readyState = MockWebSocket.CONNECTING;
+    this.onopen = null;
+    this.onclose = null;
+    this.onmessage = null;
+    this.onerror = null;
 
-// Mock crypto API
+    // Simulate connection after a short delay
+    setTimeout(() => {
+      this.readyState = MockWebSocket.OPEN;
+      if (this.onopen) this.onopen(new Event('open'));
+    }, 10);
+  }
+
+  send(data) {
+    // Mock send functionality
+    this.lastSentData = data;
+  }
+
+  close(code = 1000, reason = 'Normal closure') {
+    this.readyState = MockWebSocket.CLOSED;
+    if (this.onclose) this.onclose({ code, reason });
+  }
+
+  addEventListener(event, handler) {
+    this[`on${event}`] = handler;
+  }
+
+  removeEventListener(event, handler) {
+    this[`on${event}`] = null;
+  }
+
+  // Helper method for testing
+  simulateMessage(data) {
+    if (this.onmessage) {
+      this.onmessage({ data: JSON.stringify(data) });
+    }
+  }
+
+  simulateError(error) {
+    if (this.onerror) {
+      this.onerror(error);
+    }
+  }
+}
+
+MockWebSocket.CONNECTING = 0;
+MockWebSocket.OPEN = 1;
+MockWebSocket.CLOSING = 2;
+MockWebSocket.CLOSED = 3;
+
+global.WebSocket = MockWebSocket;
+
+// Mock crypto API with HMAC support for WebSocket authentication
+const crypto = require('crypto');
+
 global.crypto = {
   getRandomValues: (arr) => {
     for (let i = 0; i < arr.length; i++) {
@@ -48,6 +97,11 @@ global.crypto = {
     return arr;
   },
   randomUUID: () => 'test-uuid-' + Math.random().toString(36).substr(2, 9),
+  createHmac: crypto.createHmac,
+  createCipher: crypto.createCipher,
+  createCipherGCM: crypto.createCipherGCM,
+  createDecipher: crypto.createDecipher,
+  createDecipherGCM: crypto.createDecipherGCM,
 };
 
 // Suppress console.log in tests unless explicitly needed
