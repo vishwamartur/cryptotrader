@@ -272,10 +272,12 @@ Edit `.env.local` with your API keys:
 ```env
 # Required for AI features (get from https://www.perplexity.ai/settings/api)
 PERPLEXITY_API_KEY=pplx-your-api-key-here
-# Do NOT commit this file. Ensure .env*, .env.local are in .gitignore.
 
-# Optional: Set to true for demo mode with mock data
-NEXT_PUBLIC_DEMO_MODE=true
+# Required for live trading (get from https://www.delta.exchange/app/api-management)
+DELTA_EXCHANGE_API_KEY=your_delta_exchange_api_key_here
+DELTA_EXCHANGE_API_SECRET=your_delta_exchange_api_secret_here
+
+# Do NOT commit this file. Ensure .env*, .env.local are in .gitignore.
 ```
 
 ### 3. Start the Application
