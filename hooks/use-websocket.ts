@@ -4,6 +4,43 @@ import { useEffect, useRef, useState, useCallback } from "react"
 import { generateHmacSha256 } from "../lib/crypto-utils"
 import { validateWebSocketURL, createWebSocketErrorMessage } from "../lib/websocket-validator"
 
+// WebSocket diagnostic helper
+function diagnoseWebSocketError(url: string, errorDetails: any): string[] {
+  const diagnostics: string[] = [];
+
+  if (url.includes('delta.exchange')) {
+    diagnostics.push('🔍 Delta Exchange WebSocket Diagnostics:');
+    diagnostics.push('• Check if Delta Exchange WebSocket service is operational');
+    diagnostics.push('• Verify your API credentials are valid');
+    diagnostics.push('• Ensure your IP is not blocked by Delta Exchange');
+    diagnostics.push('• Check Delta Exchange status: https://status.delta.exchange');
+  }
+
+  if (url.includes('localhost') || url.includes('127.0.0.1')) {
+    diagnostics.push('🔍 Local WebSocket Diagnostics:');
+    diagnostics.push('• Verify local WebSocket server is running');
+    diagnostics.push('• Check if the port is correct and not blocked');
+    diagnostics.push('• Ensure no other service is using the same port');
+  }
+
+  if (errorDetails.target?.readyState === WebSocket.CONNECTING) {
+    diagnostics.push('🔍 Connection Diagnostics:');
+    diagnostics.push('• Server may be unreachable or overloaded');
+    diagnostics.push('• Check your internet connection');
+    diagnostics.push('• Verify firewall is not blocking WebSocket connections');
+    diagnostics.push('• Try connecting to the server from a different network');
+  }
+
+  if (errorDetails.connectionContext?.reconnectAttempts > 0) {
+    diagnostics.push('🔍 Reconnection Diagnostics:');
+    diagnostics.push(`• This is reconnection attempt ${errorDetails.connectionContext.reconnectAttempts + 1}`);
+    diagnostics.push('• Previous connections have failed');
+    diagnostics.push('• Consider checking server logs for connection issues');
+  }
+
+  return diagnostics;
+}
+
 interface WebSocketConfig {
   url: string
   reconnectInterval?: number
@@ -69,7 +106,14 @@ export function useWebSocket(config: WebSocketConfig) {
 
       ws.onopen = () => {
         clearTimeout(connectionTimeout);
-        console.log("[v0] WebSocket connected successfully to:", url);
+        console.log("[v0] ✅ WebSocket connected successfully");
+        console.log("[v0] Connection details:", {
+          url: url,
+          protocol: ws.protocol || 'none',
+          extensions: ws.extensions || 'none',
+          readyState: ws.readyState,
+          readyStateName: 'OPEN'
+        });
         setIsConnected(true);
         setError(null);
         setReconnectAttempts(0);
@@ -92,16 +136,31 @@ export function useWebSocket(config: WebSocketConfig) {
 
       ws.onclose = (event) => {
         clearTimeout(connectionTimeout);
-        console.log(
-          "[v0] WebSocket disconnected - Code:",
-          event.code,
-          "Reason:",
-          event.reason || 'No reason provided',
-          "Clean:",
-          event.wasClean,
-          "URL:",
-          url
-        );
+
+        const closeDetails = {
+          code: event.code,
+          reason: event.reason || 'No reason provided',
+          wasClean: event.wasClean,
+          url: url,
+          timestamp: new Date().toISOString()
+        };
+
+        // Determine close reason category
+        let closeCategory = 'Unknown';
+        if (event.code === 1000) closeCategory = 'Normal closure';
+        else if (event.code === 1001) closeCategory = 'Going away';
+        else if (event.code === 1002) closeCategory = 'Protocol error';
+        else if (event.code === 1003) closeCategory = 'Unsupported data';
+        else if (event.code === 1006) closeCategory = 'Abnormal closure';
+        else if (event.code === 1011) closeCategory = 'Server error';
+        else if (event.code === 1012) closeCategory = 'Service restart';
+        else if (event.code === 1013) closeCategory = 'Try again later';
+        else if (event.code === 1014) closeCategory = 'Bad gateway';
+        else if (event.code === 1015) closeCategory = 'TLS handshake failure';
+
+        console.log("[v0] 🔌 WebSocket disconnected:", closeCategory);
+        console.log("[v0] Close details:", closeDetails);
+
         setIsConnected(false);
 
         let errorMessage = "Connection closed"
@@ -143,52 +202,113 @@ export function useWebSocket(config: WebSocketConfig) {
       }
 
       ws.onerror = (errorEvent) => {
-        // Extract meaningful error information
-        const errorDetails = {
-          type: errorEvent.type,
-          timeStamp: errorEvent.timeStamp,
-          target: errorEvent.target ? {
-            readyState: (errorEvent.target as WebSocket).readyState,
-            url: (errorEvent.target as WebSocket).url,
-            protocol: (errorEvent.target as WebSocket).protocol
-          } : null,
-          message: errorEvent instanceof ErrorEvent ? errorEvent.message : 'Unknown error'
-        };
+        // Extract meaningful error information with proper error handling
+        let errorDetails: any = {};
+
+        try {
+          // Safely extract event properties
+          errorDetails.eventType = errorEvent.type || 'error';
+          errorDetails.timeStamp = errorEvent.timeStamp || Date.now();
+
+          // Check if it's an ErrorEvent (has message property)
+          if (errorEvent instanceof ErrorEvent) {
+            errorDetails.isErrorEvent = true;
+            errorDetails.message = errorEvent.message || 'No error message';
+            errorDetails.filename = errorEvent.filename || 'Unknown file';
+            errorDetails.lineno = errorEvent.lineno || 0;
+            errorDetails.colno = errorEvent.colno || 0;
+          } else {
+            errorDetails.isErrorEvent = false;
+            errorDetails.message = 'WebSocket error (no message available)';
+          }
+
+          // Extract WebSocket target information
+          if (errorEvent.target && errorEvent.target instanceof WebSocket) {
+            const wsTarget = errorEvent.target as WebSocket;
+            errorDetails.target = {
+              readyState: wsTarget.readyState,
+              readyStateName: ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'][wsTarget.readyState] || 'UNKNOWN',
+              url: wsTarget.url || url,
+              protocol: wsTarget.protocol || 'unknown',
+              extensions: wsTarget.extensions || 'none'
+            };
+          } else {
+            errorDetails.target = {
+              readyState: 'unknown',
+              readyStateName: 'UNKNOWN',
+              url: url,
+              protocol: 'unknown',
+              extensions: 'none'
+            };
+          }
+
+          // Add connection context
+          errorDetails.connectionContext = {
+            url: url,
+            reconnectAttempts: reconnectAttempts,
+            maxReconnectAttempts: maxReconnectAttempts,
+            isConnected: isConnected
+          };
+
+        } catch (extractError) {
+          console.warn("[v0] Error extracting WebSocket error details:", extractError);
+          errorDetails = {
+            eventType: 'error',
+            message: 'Failed to extract error details',
+            extractionError: extractError instanceof Error ? extractError.message : 'Unknown extraction error',
+            url: url,
+            reconnectAttempts: reconnectAttempts
+          };
+        }
 
         console.error("[v0] WebSocket error event details:", errorDetails);
 
+        // Generate detailed error message based on extracted details
         let errorMessage = "WebSocket connection error";
 
-        if (errorEvent instanceof ErrorEvent && errorEvent.message) {
-          errorMessage = `WebSocket error: ${errorEvent.message}`;
-        } else if (errorEvent.target instanceof WebSocket) {
-          const ws = errorEvent.target;
-          const readyStateNames = {
-            [WebSocket.CONNECTING]: 'CONNECTING',
-            [WebSocket.OPEN]: 'OPEN',
-            [WebSocket.CLOSING]: 'CLOSING',
-            [WebSocket.CLOSED]: 'CLOSED'
-          };
+        if (errorDetails.isErrorEvent && errorDetails.message && errorDetails.message !== 'No error message') {
+          errorMessage = `WebSocket error: ${errorDetails.message}`;
+        } else if (errorDetails.target && errorDetails.target.readyState !== 'unknown') {
+          const readyState = errorDetails.target.readyState;
+          const readyStateName = errorDetails.target.readyStateName;
+          const wsUrl = errorDetails.target.url;
 
-          switch (ws.readyState) {
+          switch (readyState) {
             case WebSocket.CONNECTING:
-              errorMessage = `Failed to connect to WebSocket server (${ws.url})`;
+              errorMessage = `Failed to connect to WebSocket server (${wsUrl})`;
               break;
             case WebSocket.CLOSING:
               errorMessage = "WebSocket connection is closing";
               break;
             case WebSocket.CLOSED:
-              errorMessage = "WebSocket connection failed";
+              errorMessage = `WebSocket connection closed unexpectedly (${wsUrl})`;
+              break;
+            case WebSocket.OPEN:
+              errorMessage = `WebSocket error while connected (${wsUrl})`;
               break;
             default:
-              errorMessage = `WebSocket error in state: ${readyStateNames[ws.readyState] || ws.readyState}`;
+              errorMessage = `WebSocket error in state: ${readyStateName} (${readyState})`;
           }
+        } else {
+          errorMessage = `WebSocket connection error for ${url}`;
+        }
+
+        // Add connection context to error message
+        if (reconnectAttempts > 0) {
+          errorMessage += ` (attempt ${reconnectAttempts + 1}/${maxReconnectAttempts})`;
         }
 
         // Create enhanced error message with troubleshooting steps
         const enhancedErrorMessage = createWebSocketErrorMessage(url, errorMessage);
 
-        console.error("[v0] WebSocket error details:", enhancedErrorMessage);
+        // Add diagnostic information
+        const diagnostics = diagnoseWebSocketError(url, errorDetails);
+        if (diagnostics.length > 0) {
+          console.warn("[v0] WebSocket Connection Diagnostics:");
+          diagnostics.forEach(diagnostic => console.warn(diagnostic));
+        }
+
+        console.error("[v0] Enhanced error message:", enhancedErrorMessage);
         setError(enhancedErrorMessage);
       }
     } catch (err) {
