@@ -87,7 +87,12 @@ export function TradingInterface() {
       // Simulate fetching historical prices
       const now = Date.now()
       const oneDayAgo = now - 24 * 3600 * 1000
-      const data = await marketProvider.getHistoricalData(quantSymbol, oneDayAgo, now)
+      // Use mock data for now since getHistoricalData is not implemented
+      const data = Array.from({ length: 24 }, (_, i) => ({
+        timestamp: new Date(oneDayAgo.getTime() + i * 60 * 60 * 1000),
+        price: 50000 + Math.random() * 1000,
+        volume: Math.random() * 1000000
+      }))
       setQuantPrices(data.map(d => d.price))
       setIsQuantLoading(false)
     }
@@ -191,119 +196,9 @@ export function TradingInterface() {
                 <div className="flex items-center gap-2">
                   {!apiCredentials && (
                     <Badge variant="outline" className="text-xs">
-                  {/* Quant Analytics Panel */}
-                  <div className="mt-8">
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Quant Analytics</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        {quantStats ? (
-                          <div className="grid grid-cols-2 gap-4 text-sm">
-                            <div><strong>Mean:</strong> {quantStats.mean.toFixed(2)}</div>
-                            <div><strong>Std Dev:</strong> {quantStats.stddev.toFixed(2)}</div>
-                            <div><strong>Sharpe Ratio:</strong> {quantStats.sharpe.toFixed(2)}</div>
-                            <div><strong>Max Drawdown:</strong> {(quantStats.drawdown * 100).toFixed(2)}%</div>
-                            <div><strong>Correlation:</strong> {quantStats.correlation.toFixed(2)}</div>
-                          </div>
-                        ) : (
-                          <div>Loading analytics...</div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </div>
-                  {/* Quant Trading Panel */}
-                  <div className="mt-8">
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Quant Trading</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="flex flex-col gap-4">
-                          <div>
-                            <Label htmlFor="quant-symbol">Symbol</Label>
-                            <Select value={quantSymbol} onValueChange={setQuantSymbol}>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select pair" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {TRADING_PAIRS.map((pair) => (
-                                  <SelectItem key={pair.value} value={pair.value}>
-                                    {pair.label}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div>
-                            <Label>Strategy</Label>
-                            <Badge variant="outline">Moving Average Crossover</Badge>
-                          </div>
-                          <div>
-                            <Label>Signal</Label>
-                            {isQuantLoading ? (
-                              <span>Loading...</span>
-                            ) : quantSignal ? (
-                              <span>
-                                <Badge variant={quantSignal.action === "buy" ? "success" : quantSignal.action === "sell" ? "destructive" : "outline"}>
-                                  {quantSignal.action.toUpperCase()}
-                                </Badge>
-                                {quantSignal.confidence > 0 && (
-                                  <span className="ml-2 text-xs text-muted-foreground">Confidence: {(quantSignal.confidence * 100).toFixed(1)}%</span>
-                                )}
-                              </span>
-                            ) : (
-                              <span>No signal</span>
-                            )}
-                          </div>
-                          <Button
-                            className="w-full"
-                            disabled={!quantSignal || quantSignal.action === "hold"}
-                            onClick={handleQuantTrade}
-                          >
-                            Execute Quant Trade
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </div>
-                  {/* Live Trading Panel */}
-                  <div className="mt-8">
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Live Trading</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="flex gap-4 mb-4">
-                          <Button onClick={handleStartLive} disabled={isLiveRunning} className="bg-blue-600 hover:bg-blue-700">Start Live</Button>
-                          <Button onClick={handleStopLive} disabled={!isLiveRunning} className="bg-gray-600 hover:bg-gray-700">Stop Live</Button>
-                        </div>
-                        <div className="text-xs">
-                          <strong>Status:</strong> {isLiveRunning ? "Running" : "Stopped"}
-                        </div>
-                        <div className="mt-2">
-                          <strong>Logs:</strong>
-                          <div className="max-h-40 overflow-auto border p-2 bg-muted">
-                            {liveLogs.length === 0 ? (
-                              <div>No logs yet.</div>
-                            ) : (
-                              liveLogs.map((log, idx) => (
-                                <div key={idx} className="mb-2">
-                                  <div>Time: {new Date(log.time).toLocaleTimeString()}</div>
-                                  <div>Signal: {log.signal.action}</div>
-                                  <div>Order: {log.order.action} {log.order.symbol} @ {log.order.price}</div>
-                                  <div>Result: {log.result.message}</div>
-                                </div>
-                              ))
-                            )}
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </div>
-                  <AlertCircle className="h-3 w-3 mr-1" />
-                  API Required
-                </Badge>
+                      <AlertCircle className="h-3 w-3 mr-1" />
+                      API Required
+                    </Badge>
                   )}
                   <Button variant="ghost" size="sm" onClick={() => setShowCredentialsDialog(true)}>
                     <Settings className="h-4 w-4" />
@@ -529,6 +424,119 @@ export function TradingInterface() {
         <div className="lg:col-span-1">
           <OrderBook symbol={selectedPair} />
         </div>
+      </div>
+
+      {/* Quant Analytics Panel */}
+      <div className="mt-8">
+        <Card>
+          <CardHeader>
+            <CardTitle>Quant Analytics</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {quantStats ? (
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div><strong>Mean:</strong> {quantStats.mean.toFixed(2)}</div>
+                <div><strong>Std Dev:</strong> {quantStats.stddev.toFixed(2)}</div>
+                <div><strong>Sharpe Ratio:</strong> {quantStats.sharpe.toFixed(2)}</div>
+                <div><strong>Max Drawdown:</strong> {(quantStats.drawdown * 100).toFixed(2)}%</div>
+                <div><strong>Correlation:</strong> {quantStats.correlation.toFixed(2)}</div>
+              </div>
+            ) : (
+              <div>Loading analytics...</div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Quant Trading Panel */}
+      <div className="mt-8">
+        <Card>
+          <CardHeader>
+            <CardTitle>Quant Trading</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col gap-4">
+              <div>
+                <Label htmlFor="quant-symbol">Symbol</Label>
+                <Select value={quantSymbol} onValueChange={setQuantSymbol}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select pair" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TRADING_PAIRS.map((pair) => (
+                      <SelectItem key={pair.value} value={pair.value}>
+                        {pair.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Strategy</Label>
+                <Badge variant="outline">Moving Average Crossover</Badge>
+              </div>
+              <div>
+                <Label>Signal</Label>
+                {isQuantLoading ? (
+                  <span>Loading...</span>
+                ) : quantSignal ? (
+                  <span>
+                    <Badge variant={quantSignal.action === "buy" ? "default" : quantSignal.action === "sell" ? "destructive" : "outline"}>
+                      {quantSignal.action.toUpperCase()}
+                    </Badge>
+                    {quantSignal.confidence > 0 && (
+                      <span className="ml-2 text-xs text-muted-foreground">Confidence: {(quantSignal.confidence * 100).toFixed(1)}%</span>
+                    )}
+                  </span>
+                ) : (
+                  <span>No signal</span>
+                )}
+              </div>
+              <Button
+                className="w-full"
+                disabled={!quantSignal || quantSignal.action === "hold"}
+                onClick={handleQuantTrade}
+              >
+                Execute Quant Trade
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Live Trading Panel */}
+      <div className="mt-8">
+        <Card>
+          <CardHeader>
+            <CardTitle>Live Trading</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-4 mb-4">
+              <Button onClick={handleStartLive} disabled={isLiveRunning} className="bg-blue-600 hover:bg-blue-700">Start Live</Button>
+              <Button onClick={handleStopLive} disabled={!isLiveRunning} className="bg-gray-600 hover:bg-gray-700">Stop Live</Button>
+            </div>
+            <div className="text-xs">
+              <strong>Status:</strong> {isLiveRunning ? "Running" : "Stopped"}
+            </div>
+            <div className="mt-2">
+              <strong>Logs:</strong>
+              <div className="max-h-40 overflow-auto border p-2 bg-muted">
+                {liveLogs.length === 0 ? (
+                  <div>No logs yet.</div>
+                ) : (
+                  liveLogs.map((log, idx) => (
+                    <div key={idx} className="mb-2">
+                      <div>Time: {new Date(log.time).toLocaleTimeString()}</div>
+                      <div>Signal: {log.signal.action}</div>
+                      <div>Order: {log.order.action} {log.order.symbol} @ {log.order.price}</div>
+                      <div>Result: {log.result.message}</div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <ApiCredentialsDialog

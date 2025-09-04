@@ -29,7 +29,9 @@ export function RiskDashboard() {
     riskPerTrade: 0.02,
   })
 
-  const { positions, balance } = usePortfolio()
+  const { portfolioData } = usePortfolio(null)
+  const positions = portfolioData?.positions || []
+  const balance = portfolioData?.balance || { total: 0, available: 0, reserved: 0 }
   const { marketData } = useMarketData()
 
   useEffect(() => {

@@ -62,12 +62,18 @@ interface DashboardLayout {
   autoRefresh: boolean
   refreshInterval: number
   notifications: boolean
-  view: 'home' | 'advanced'
+  view: 'overview' | 'trading' | 'analytics' | 'monitoring'
+  compactMode: boolean
+  gridColumns: number
 }
 
 interface WelcomeProps {
   onGetStarted: () => void
   theme: 'light' | 'dark'
+}
+
+interface UnifiedDashboardProps {
+  initialView?: 'overview' | 'trading' | 'analytics' | 'monitoring' | null
 }
 
 const WelcomeSection: React.FC<WelcomeProps> = ({ onGetStarted, theme }) => (
@@ -115,7 +121,7 @@ const WelcomeSection: React.FC<WelcomeProps> = ({ onGetStarted, theme }) => (
   </div>
 )
 
-export function UnifiedDashboard() {
+export function UnifiedDashboard({ initialView }: UnifiedDashboardProps = {}) {
   const containerRef = useRef<HTMLDivElement>(null)
   const headerRef = useRef<HTMLDivElement>(null)
   const gridRef = useRef<HTMLDivElement>(null)
@@ -126,7 +132,9 @@ export function UnifiedDashboard() {
     autoRefresh: true,
     refreshInterval: 1000,
     notifications: true,
-    view: 'home'
+    view: initialView || 'overview',
+    compactMode: false,
+    gridColumns: 3
   })
 
   const [isFullscreen, setIsFullscreen] = useState(false)
@@ -241,10 +249,14 @@ export function UnifiedDashboard() {
     saveLayout({ ...layout, theme: newTheme })
   }
 
-  // Toggle view
-  const toggleView = () => {
-    const newView = layout.view === 'home' ? 'advanced' : 'home'
+  // Switch view
+  const switchView = (newView: 'overview' | 'trading' | 'analytics' | 'monitoring') => {
     saveLayout({ ...layout, view: newView })
+  }
+
+  // Toggle compact mode
+  const toggleCompactMode = () => {
+    saveLayout({ ...layout, compactMode: !layout.compactMode })
   }
 
   // Toggle fullscreen
@@ -308,12 +320,48 @@ export function UnifiedDashboard() {
             </div>
 
             <div className="flex items-center space-x-2">
-              {/* View toggle */}
-              <Button variant="ghost" size="sm" onClick={toggleView}>
-                {layout.view === 'home' ? (
-                  <><BarChart3 className="w-4 h-4 mr-2" /> Advanced</>
+              {/* View selector */}
+              <div className="flex items-center space-x-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+                <Button
+                  variant={layout.view === 'overview' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => switchView('overview')}
+                  className="text-xs px-2 py-1"
+                >
+                  Overview
+                </Button>
+                <Button
+                  variant={layout.view === 'trading' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => switchView('trading')}
+                  className="text-xs px-2 py-1"
+                >
+                  Trading
+                </Button>
+                <Button
+                  variant={layout.view === 'analytics' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => switchView('analytics')}
+                  className="text-xs px-2 py-1"
+                >
+                  Analytics
+                </Button>
+                <Button
+                  variant={layout.view === 'monitoring' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => switchView('monitoring')}
+                  className="text-xs px-2 py-1"
+                >
+                  Monitoring
+                </Button>
+              </div>
+
+              {/* Compact mode toggle */}
+              <Button variant="ghost" size="sm" onClick={toggleCompactMode}>
+                {layout.compactMode ? (
+                  <><Maximize2 className="w-4 h-4 mr-2" /> Expand</>
                 ) : (
-                  <><Home className="w-4 h-4 mr-2" /> Home</>
+                  <><Minimize2 className="w-4 h-4 mr-2" /> Compact</>
                 )}
               </Button>
 
@@ -365,119 +413,137 @@ export function UnifiedDashboard() {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-6 relative z-10">
         {/* Welcome Section */}
-        {showWelcome && layout.view === 'home' && (
+        {showWelcome && layout.view === 'overview' && (
           <WelcomeSection onGetStarted={handleGetStarted} theme={layout.theme} />
         )}
 
         {/* Dashboard Content */}
-        {(!showWelcome || layout.view === 'advanced') && (
+        {(!showWelcome) && (
           <div ref={gridRef}>
-            {layout.view === 'home' ? (
-              // Home View - Original Trading Dashboard
-              <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-                <div className="lg:col-span-3 trading-card">
+            {layout.view === 'overview' ? (
+              // Overview - Combined Essential Dashboard
+              <div className={`grid gap-6 ${layout.compactMode ? 'grid-cols-1 lg:grid-cols-6' : 'grid-cols-1 lg:grid-cols-4'}`}>
+                {/* Market Overview Row */}
+                <div className={`${layout.compactMode ? 'lg:col-span-4' : 'lg:col-span-3'} trading-card`}>
                   <MarketOverview />
                 </div>
-                <div className="lg:col-span-1 trading-card pulse-element">
+                <div className={`${layout.compactMode ? 'lg:col-span-2' : 'lg:col-span-1'} trading-card pulse-element`}>
                   <Portfolio />
                 </div>
-                <div className="lg:col-span-2 trading-card" data-component="ai-trading-panel">
-                  <AITradingPanel />
+
+                {/* Live Data Row */}
+                <div className={`${layout.compactMode ? 'lg:col-span-3' : 'lg:col-span-2'} trading-card`}>
+                  <LivePriceFeeds />
                 </div>
-                <div className="lg:col-span-2 trading-card">
-                  <AutonomousAgentPanel />
+                <div className={`${layout.compactMode ? 'lg:col-span-3' : 'lg:col-span-2'} trading-card`}>
+                  <PortfolioTracker />
                 </div>
-                <div className="lg:col-span-2 trading-card pulse-element" data-component="risk-dashboard">
+
+                {/* AI & Risk Row */}
+                <div className={`${layout.compactMode ? 'lg:col-span-3' : 'lg:col-span-2'} trading-card`} data-component="ai-trading-panel">
+                  <AITradingSignals />
+                </div>
+                <div className={`${layout.compactMode ? 'lg:col-span-3' : 'lg:col-span-2'} trading-card pulse-element`} data-component="risk-dashboard">
                   <RiskDashboard />
                 </div>
-                <div className="lg:col-span-2 trading-card">
-                  <TradeMonitor />
+
+                {/* System Status Row */}
+                <div className={`${layout.compactMode ? 'lg:col-span-2' : 'lg:col-span-1'} trading-card`}>
+                  <SystemHealth />
                 </div>
-                <div className="lg:col-span-2 trading-card">
+                <div className={`${layout.compactMode ? 'lg:col-span-2' : 'lg:col-span-1'} trading-card`}>
+                  <DeltaConnectionStatus />
+                </div>
+                <div className={`${layout.compactMode ? 'lg:col-span-2' : 'lg:col-span-2'} trading-card`}>
+                  <AlertsNotifications alerts={alerts} onDismiss={(id) => setAlerts(prev => prev.filter(a => a.id !== id))} />
+                </div>
+              </div>
+            ) : layout.view === 'trading' ? (
+              // Trading - Focused Trading Interface
+              <div className={`grid gap-6 ${layout.compactMode ? 'grid-cols-1 lg:grid-cols-6' : 'grid-cols-1 lg:grid-cols-4'}`}>
+                {/* Trading Interface Row */}
+                <div className={`${layout.compactMode ? 'lg:col-span-3' : 'lg:col-span-2'} trading-card`} data-component="trading-interface">
+                  <TradingInterface />
+                </div>
+                <div className={`${layout.compactMode ? 'lg:col-span-3' : 'lg:col-span-2'} trading-card`}>
                   <AdvancedTradingPanel />
                 </div>
-                <div className="lg:col-span-2 trading-card" data-component="trading-interface">
-                  <TradingInterface />
+
+                {/* AI Trading Row */}
+                <div className={`${layout.compactMode ? 'lg:col-span-3' : 'lg:col-span-2'} trading-card`}>
+                  <AITradingPanel />
+                </div>
+                <div className={`${layout.compactMode ? 'lg:col-span-3' : 'lg:col-span-2'} trading-card`}>
+                  <AutonomousAgentPanel />
+                </div>
+
+                {/* Order Management Row */}
+                <div className={`${layout.compactMode ? 'lg:col-span-3' : 'lg:col-span-2'} trading-card`}>
+                  <OrderExecution />
+                </div>
+                <div className={`${layout.compactMode ? 'lg:col-span-3' : 'lg:col-span-2'} trading-card`}>
+                  <TradingPositions />
+                </div>
+
+                {/* Quick Actions & Monitor */}
+                <div className={`${layout.compactMode ? 'lg:col-span-2' : 'lg:col-span-1'} trading-card`}>
+                  <QuickActions />
+                </div>
+                <div className={`${layout.compactMode ? 'lg:col-span-4' : 'lg:col-span-3'} trading-card`}>
+                  <TradeMonitor />
+                </div>
+              </div>
+            ) : layout.view === 'analytics' ? (
+              // Analytics - Performance & ML Analytics
+              <div className={`grid gap-6 ${layout.compactMode ? 'grid-cols-1 lg:grid-cols-6' : 'grid-cols-1 lg:grid-cols-3'}`}>
+                {/* Performance Charts */}
+                <div className={`${layout.compactMode ? 'lg:col-span-6' : 'lg:col-span-3'} trading-card`}>
+                  <PerformanceCharts />
+                </div>
+
+                {/* Strategy & Sentiment Row */}
+                <div className={`${layout.compactMode ? 'lg:col-span-3' : 'lg:col-span-2'} trading-card`}>
+                  <StrategyPerformance />
+                </div>
+                <div className={`${layout.compactMode ? 'lg:col-span-3' : 'lg:col-span-1'} trading-card`}>
+                  <MarketSentiment />
+                </div>
+
+                {/* ML Models Row */}
+                <div className={`${layout.compactMode ? 'lg:col-span-4' : 'lg:col-span-2'} trading-card`}>
+                  <MLModelsOverview />
+                </div>
+                <div className={`${layout.compactMode ? 'lg:col-span-2' : 'lg:col-span-1'} trading-card`}>
+                  <MLPredictionsFeed />
                 </div>
               </div>
             ) : (
-              // Advanced View - Advanced Dashboard Components
-              <Tabs defaultValue="realtime" className="w-full">
-                <TabsList className="grid w-full grid-cols-4 mb-6">
-                  <TabsTrigger value="realtime">Real-time</TabsTrigger>
-                  <TabsTrigger value="monitoring">Monitoring</TabsTrigger>
-                  <TabsTrigger value="analytics">Analytics</TabsTrigger>
-                  <TabsTrigger value="controls">Controls</TabsTrigger>
-                </TabsList>
+              // Monitoring - System Health & Risk Management
+              <div className={`grid gap-6 ${layout.compactMode ? 'grid-cols-1 lg:grid-cols-6' : 'grid-cols-1 lg:grid-cols-3'}`}>
+                {/* System Health Row */}
+                <div className={`${layout.compactMode ? 'lg:col-span-2' : 'lg:col-span-1'} trading-card`}>
+                  <SystemHealth />
+                </div>
+                <div className={`${layout.compactMode ? 'lg:col-span-2' : 'lg:col-span-1'} trading-card`}>
+                  <DeltaConnectionStatus />
+                </div>
+                <div className={`${layout.compactMode ? 'lg:col-span-2' : 'lg:col-span-1'} trading-card`}>
+                  <RiskManagement />
+                </div>
 
-                <TabsContent value="realtime" className="space-y-6">
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div className="lg:col-span-2 trading-card">
-                      <LivePriceFeeds theme={layout.theme} autoRefresh={layout.autoRefresh} refreshInterval={layout.refreshInterval} />
-                    </div>
-                    <div className="trading-card">
-                      <PortfolioTracker theme={layout.theme} autoRefresh={layout.autoRefresh} refreshInterval={layout.refreshInterval} />
-                    </div>
-                    <div className="lg:col-span-2 trading-card">
-                      <AITradingSignals theme={layout.theme} autoRefresh={layout.autoRefresh} refreshInterval={layout.refreshInterval} />
-                    </div>
-                    <div className="trading-card">
-                      <TradingPositions theme={layout.theme} autoRefresh={layout.autoRefresh} refreshInterval={layout.refreshInterval} />
-                    </div>
-                  </div>
-                </TabsContent>
+                {/* Alerts & Notifications */}
+                <div className={`${layout.compactMode ? 'lg:col-span-6' : 'lg:col-span-3'} trading-card`}>
+                  <AlertsNotifications alerts={alerts} onDismiss={(id) => setAlerts(prev => prev.filter(a => a.id !== id))} />
+                </div>
 
-                <TabsContent value="monitoring" className="space-y-6">
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div className="trading-card">
-                      <SystemHealth theme={layout.theme} autoRefresh={layout.autoRefresh} refreshInterval={layout.refreshInterval} />
-                    </div>
-                    <div className="trading-card">
-                      <RiskManagement theme={layout.theme} autoRefresh={layout.autoRefresh} refreshInterval={layout.refreshInterval} />
-                    </div>
-                    <div className="trading-card">
-                      <OrderExecution theme={layout.theme} autoRefresh={layout.autoRefresh} refreshInterval={layout.refreshInterval} />
-                    </div>
-                    <div className="trading-card">
-                      <DeltaConnectionStatus theme={layout.theme} autoRefresh={layout.autoRefresh} refreshInterval={layout.refreshInterval} />
-                    </div>
-                    <div className="lg:col-span-2 trading-card">
-                      <AlertsNotifications theme={layout.theme} alerts={alerts} onDismiss={(id) => setAlerts(prev => prev.filter(a => a.id !== id))} />
-                    </div>
-                  </div>
-                </TabsContent>
-
-                <TabsContent value="analytics" className="space-y-6">
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <div className="trading-card">
-                      <StrategyPerformance theme={layout.theme} autoRefresh={layout.autoRefresh} refreshInterval={layout.refreshInterval} />
-                    </div>
-                    <div className="trading-card">
-                      <MarketSentiment theme={layout.theme} autoRefresh={layout.autoRefresh} refreshInterval={layout.refreshInterval} />
-                    </div>
-                    <div className="lg:col-span-2 trading-card">
-                      <PerformanceCharts theme={layout.theme} autoRefresh={layout.autoRefresh} refreshInterval={layout.refreshInterval} />
-                    </div>
-                    <div className="lg:col-span-2 trading-card">
-                      <MLModelsOverview theme={layout.theme} autoRefresh={layout.autoRefresh} refreshInterval={layout.refreshInterval} />
-                    </div>
-                    <div className="trading-card">
-                      <MLPredictionsFeed theme={layout.theme} autoRefresh={layout.autoRefresh} refreshInterval={layout.refreshInterval} />
-                    </div>
-                  </div>
-                </TabsContent>
-
-                <TabsContent value="controls" className="space-y-6">
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div className="trading-card">
-                      <QuickActions theme={layout.theme} autoRefresh={layout.autoRefresh} refreshInterval={layout.refreshInterval} />
-                    </div>
-                    <div className="lg:col-span-2 trading-card">
-                      <TradingInterface />
-                    </div>
-                  </div>
-                </TabsContent>
-              </Tabs>
+                {/* Risk Dashboard */}
+                <div className={`${layout.compactMode ? 'lg:col-span-4' : 'lg:col-span-2'} trading-card`}>
+                  <RiskDashboard />
+                </div>
+                <div className={`${layout.compactMode ? 'lg:col-span-2' : 'lg:col-span-1'} trading-card`}>
+                  <TradeMonitor />
+                </div>
+              </div>
             )}
           </div>
         )}

@@ -1,6 +1,9 @@
 'use client';
 
 import { EventEmitter } from 'events';
+import { createDeltaWebSocketClient, DeltaWebSocketClient } from './delta-websocket-client';
+import { createDeltaWebSocketAPI, DeltaWebSocketAPI, RealtimeTickerData } from './delta-websocket-api';
+import { createDeltaExchangeAPIFromEnv } from './delta-exchange';
 
 export interface RealtimeMarketData {
   symbol: string;
@@ -47,16 +50,13 @@ interface FetchOptions extends RequestInit {
 }
 
 class RealtimeMarketDataManager extends EventEmitter {
-  private wsConnection: WebSocket | null = null;
-  private reconnectAttempts = 0;
-  private maxReconnectAttempts = 5;
-  private reconnectDelay = 1000;
-  private isConnecting = false;
+  private wsClient: DeltaWebSocketClient;
+  private wsAPI: DeltaWebSocketAPI;
   private subscribedSymbols = new Set<string>();
   private marketDataCache = new Map<string, RealtimeMarketData>();
   private productsCache = new Map<string, ProductInfo>();
-  private pollingInterval: NodeJS.Timeout | null = null;
   private lastUpdateTime = 0;
+  private isConnected = false;
 
   // Network configuration
   private networkConfig: NetworkConfig = {
@@ -72,8 +72,80 @@ class RealtimeMarketDataManager extends EventEmitter {
 
   constructor() {
     super();
+
+    // Initialize WebSocket clients
+    this.wsClient = createDeltaWebSocketClient();
+    const restClient = createDeltaExchangeAPIFromEnv();
+    this.wsAPI = createDeltaWebSocketAPI(this.wsClient, restClient);
+
+    this.setupWebSocketEventHandlers();
     this.setupNetworkMonitoring();
     this.loadProducts();
+  }
+
+  // Setup WebSocket event handlers
+  private setupWebSocketEventHandlers(): void {
+    this.wsAPI.on('connected', () => {
+      console.log('[RealtimeMarketData] WebSocket connected');
+      this.isConnected = true;
+      this.emit('connected');
+
+      // Subscribe to all previously subscribed symbols
+      if (this.subscribedSymbols.size > 0) {
+        this.wsAPI.subscribeToTickers(Array.from(this.subscribedSymbols));
+      }
+    });
+
+    this.wsAPI.on('disconnected', (data) => {
+      console.log('[RealtimeMarketData] WebSocket disconnected:', data);
+      this.isConnected = false;
+      this.emit('disconnected', data);
+    });
+
+    this.wsAPI.on('error', (error) => {
+      console.error('[RealtimeMarketData] WebSocket error:', error);
+      this.emit('error', error);
+    });
+
+    this.wsAPI.on('ticker', (tickerData: RealtimeTickerData) => {
+      this.handleTickerUpdate(tickerData);
+    });
+
+    this.wsAPI.on('reconnecting', (data) => {
+      console.log('[RealtimeMarketData] WebSocket reconnecting:', data);
+      this.emit('reconnecting', data);
+    });
+  }
+
+  // Handle ticker updates from WebSocket
+  private handleTickerUpdate(tickerData: RealtimeTickerData): void {
+    const marketData: RealtimeMarketData = {
+      symbol: tickerData.symbol,
+      price: parseFloat(tickerData.price),
+      change: parseFloat(tickerData.change || '0'),
+      changePercent: parseFloat(tickerData.changePercent || '0'),
+      volume: parseFloat(tickerData.volume || '0'),
+      high24h: parseFloat(tickerData.high || '0'),
+      low24h: parseFloat(tickerData.low || '0'),
+      bid: 0, // Will be updated from orderbook data
+      ask: 0, // Will be updated from orderbook data
+      bidSize: 0,
+      askSize: 0,
+      markPrice: tickerData.markPrice ? parseFloat(tickerData.markPrice) : undefined,
+      spotPrice: tickerData.spotPrice ? parseFloat(tickerData.spotPrice) : undefined,
+      timestamp: tickerData.timestamp,
+    };
+
+    this.marketDataCache.set(tickerData.symbol, marketData);
+    this.lastUpdateTime = Date.now();
+
+    this.emit('marketDataUpdate', {
+      symbol: tickerData.symbol,
+      data: marketData,
+      timestamp: this.lastUpdateTime,
+    });
+
+    this.emit(`marketData:${tickerData.symbol}`, marketData);
   }
 
   // Setup network monitoring
@@ -320,143 +392,70 @@ class RealtimeMarketDataManager extends EventEmitter {
       .filter(product => product.productType === productType);
   }
 
-  // Connect to WebSocket (Delta Exchange doesn't have public WebSocket, so we'll use polling)
-  connect(): void {
-    if (this.isConnecting || this.pollingInterval) {
-      return;
-    }
-
-    this.isConnecting = true;
-    this.startPolling();
-  }
-
-  // Start polling for market data updates
-  private startPolling(): void {
-    this.pollingInterval = setInterval(async () => {
-      try {
-        await this.fetchMarketData();
-      } catch (error) {
-        console.error('Error fetching market data:', error);
-        this.emit('error', error);
-      }
-    }, 2000); // Poll every 2 seconds
-
-    this.isConnecting = false;
-    this.emit('connected');
-  }
-
-  // Fetch market data for subscribed symbols
-  private async fetchMarketData(): Promise<void> {
-    if (this.subscribedSymbols.size === 0) {
+  // Connect to WebSocket for real-time data streaming
+  async connect(): Promise<void> {
+    if (this.isConnected) {
       return;
     }
 
     try {
-      const symbols = Array.from(this.subscribedSymbols);
-
-      // Handle both client-side and server-side URL resolution
-      const baseUrl = typeof window !== 'undefined'
-        ? window.location.origin
-        : process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-
-      const url = `${baseUrl}/api/market/tickers?symbols=${symbols.join(',')}`;
-
-      // Use enhanced fetch with retry logic
-      const response = await this.fetchWithRetry(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        cache: 'no-cache',
-      });
-
-      const data = await response.json();
-
-      if (data.success && data.result) {
-        const now = Date.now();
-
-        data.result.forEach((ticker: any) => {
-          const marketData: RealtimeMarketData = {
-            symbol: ticker.symbol,
-            price: ticker.price || 0,
-            change: ticker.change || 0,
-            changePercent: ticker.changePercent || 0,
-            volume: ticker.volume || 0,
-            high24h: ticker.high24h || 0,
-            low24h: ticker.low24h || 0,
-            bid: ticker.bestBid || 0,
-            ask: ticker.bestAsk || 0,
-            bidSize: ticker.bestBidSize || 0,
-            askSize: ticker.bestAskSize || 0,
-            openInterest: ticker.openInterest,
-            fundingRate: ticker.fundingRate,
-            markPrice: ticker.markPrice,
-            spotPrice: ticker.spotPrice,
-            timestamp: now,
-          };
-
-          const previousData = this.marketDataCache.get(ticker.symbol);
-          this.marketDataCache.set(ticker.symbol, marketData);
-
-          // Emit update event
-          this.emit('marketData', {
-            symbol: ticker.symbol,
-            data: marketData,
-            previous: previousData,
-          });
-        });
-
-        this.lastUpdateTime = now;
-        this.emit('dataUpdated', now);
-      } else {
-        throw new Error(data.message || 'Invalid response format from tickers API');
-      }
+      console.log('[RealtimeMarketData] Connecting to Delta Exchange WebSocket...');
+      await this.wsAPI.connect();
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-
-      console.error('Error fetching market data:', {
-        error: errorMessage,
-        timestamp: new Date().toISOString(),
-        symbols: Array.from(this.subscribedSymbols),
-        networkStatus: this.isOnline ? 'online' : 'offline',
-      });
-
-      // Emit detailed error information
-      this.emit('error', {
-        type: 'MARKET_DATA_FETCH_FAILED',
-        message: errorMessage,
-        originalError: error,
-        timestamp: Date.now(),
-        symbols: Array.from(this.subscribedSymbols),
-        networkStatus: this.isOnline,
-        retryable: this.isRetryableError(error),
-      });
+      console.error('[RealtimeMarketData] Failed to connect to WebSocket:', error);
+      this.emit('error', error);
+      throw error;
     }
+  }
+
+  // This method is no longer needed as we use WebSocket streaming
+  // Kept for backward compatibility but does nothing
+  private startPolling(): void {
+    console.warn('[RealtimeMarketData] startPolling() is deprecated - using WebSocket streaming instead');
+  }
+
+  // This method is no longer needed as we use WebSocket streaming
+  // Kept for backward compatibility but does nothing
+  private async fetchMarketData(): Promise<void> {
+    console.warn('[RealtimeMarketData] fetchMarketData() is deprecated - using WebSocket streaming instead');
   }
 
   // Subscribe to market data for specific symbols
   subscribe(symbols: string[]): void {
-    symbols.forEach(symbol => {
-      this.subscribedSymbols.add(symbol.toUpperCase());
+    const normalizedSymbols = symbols.map(s => s.toUpperCase());
+
+    normalizedSymbols.forEach(symbol => {
+      this.subscribedSymbols.add(symbol);
     });
 
-    // If not connected, start connection
-    if (!this.pollingInterval) {
-      this.connect();
+    // If connected, subscribe immediately via WebSocket
+    if (this.isConnected) {
+      this.wsAPI.subscribeToTickers(normalizedSymbols);
+    } else {
+      // If not connected, connect first (subscriptions will be handled in connect event)
+      this.connect().catch(error => {
+        console.error('[RealtimeMarketData] Failed to connect for subscription:', error);
+      });
     }
 
-    this.emit('subscribed', symbols);
+    this.emit('subscribed', normalizedSymbols);
   }
 
   // Unsubscribe from market data for specific symbols
   unsubscribe(symbols: string[]): void {
-    symbols.forEach(symbol => {
-      this.subscribedSymbols.delete(symbol.toUpperCase());
-      this.marketDataCache.delete(symbol.toUpperCase());
+    const normalizedSymbols = symbols.map(s => s.toUpperCase());
+
+    normalizedSymbols.forEach(symbol => {
+      this.subscribedSymbols.delete(symbol);
+      this.marketDataCache.delete(symbol);
     });
 
-    this.emit('unsubscribed', symbols);
+    // Unsubscribe via WebSocket if connected
+    if (this.isConnected) {
+      this.wsAPI.unsubscribeFromTickers(normalizedSymbols);
+    }
+
+    this.emit('unsubscribed', normalizedSymbols);
   }
 
   // Subscribe to all available products
@@ -477,24 +476,15 @@ class RealtimeMarketDataManager extends EventEmitter {
 
   // Disconnect and cleanup
   disconnect(): void {
-    if (this.pollingInterval) {
-      clearInterval(this.pollingInterval);
-      this.pollingInterval = null;
-    }
-
-    if (this.wsConnection) {
-      this.wsConnection.close();
-      this.wsConnection = null;
-    }
-
-    this.isConnecting = false;
-    this.reconnectAttempts = 0;
+    console.log('[RealtimeMarketData] Disconnecting WebSocket...');
+    this.wsAPI.disconnect();
+    this.isConnected = false;
     this.emit('disconnected');
   }
 
   // Check connection status
   isConnected(): boolean {
-    return this.pollingInterval !== null;
+    return this.wsAPI.getConnectionStatus().connected;
   }
 
   // Get connection info
