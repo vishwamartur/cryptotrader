@@ -194,13 +194,15 @@ function PriceCard({ symbol, data, product, theme, onClick, isSelected, isLoadin
 }
 
 export function LivePriceFeeds({ theme, autoRefresh, refreshInterval }: LivePriceFeedsProps) {
-  // Use WebSocket-based market data instead of REST API
+  // Use WebSocket-based market data with "all" symbol subscription for maximum efficiency
   const marketData = useWebSocketMarketData({
     autoConnect: true,
-    subscribeToMajorPairs: true,
-    subscribeToAllProducts: false, // Start with major pairs only
-    channels: ['ticker', 'l2_orderbook'],
-    maxSymbols: 100
+    subscribeToAllSymbols: true, // ✅ Use "all" symbol subscription for ALL cryptocurrency pairs
+    subscribeToMajorPairs: false, // Disable individual subscriptions since we're using "all"
+    subscribeToAllProducts: false,
+    channels: ['v2/ticker', 'l1_orderbook'], // Enhanced channels for comprehensive real-time data
+    maxSymbols: 1000, // Allow all symbols
+    environment: 'production'
   });
 
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);

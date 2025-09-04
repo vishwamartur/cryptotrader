@@ -108,6 +108,8 @@ export function useRealtimeData() {
   // DEPRECATED: Fetch live market data from REST API (replaced by WebSocket)
   const fetchLiveMarketData = useCallback(async (symbol: string): Promise<MarketData | null> => {
     console.warn(`[useRealtimeData] ⚠️  DEPRECATED: REST API call for ${symbol} - migrate to WebSocket for 90% faster updates`);
+    console.warn(`[useRealtimeData] 🔄 MIGRATION GUIDE: Replace useRealtimeData with useWebSocketMarketData`);
+    console.warn(`[useRealtimeData] 📡 WebSocket Benefits: Real-time updates, 90% faster, "all" symbol subscription`);
 
     try {
       // Return mock data with migration guidance
@@ -125,6 +127,16 @@ export function useRealtimeData() {
       };
 
       console.log(`[useRealtimeData] 📊 Using mock data for ${symbol} - WebSocket migration recommended`);
+      console.log(`[useRealtimeData] 🚀 Migration Example:
+        // Replace this:
+        const { marketData } = useRealtimeData();
+
+        // With this:
+        const marketData = useWebSocketMarketData({
+          subscribeToAllSymbols: true,
+          channels: ['v2/ticker']
+        });
+      `);
       return mockData;
     } catch (error) {
       console.error(`[useRealtimeData] Error with deprecated REST API for ${symbol}:`, error);

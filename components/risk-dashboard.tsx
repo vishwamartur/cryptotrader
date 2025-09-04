@@ -31,13 +31,15 @@ export function RiskDashboard() {
 
   const { portfolioData } = usePortfolio(null)
 
-  // Use WebSocket-based market data instead of REST API
+  // Use WebSocket-based market data with "all" symbol subscription for comprehensive risk analysis
   const marketDataWS = useWebSocketMarketData({
     autoConnect: true,
-    subscribeToMajorPairs: true,
+    subscribeToAllSymbols: true, // ✅ Use "all" symbol subscription for comprehensive risk monitoring
+    subscribeToMajorPairs: false, // Disable individual subscriptions since we're using "all"
     subscribeToAllProducts: false,
-    channels: ['ticker'],
-    maxSymbols: 50
+    channels: ['v2/ticker', 'l1_orderbook'], // Enhanced channels for better risk analysis
+    maxSymbols: 1000, // Allow all symbols for comprehensive risk assessment
+    environment: 'production'
   })
 
   // Memoize positions and balance to prevent unnecessary re-renders

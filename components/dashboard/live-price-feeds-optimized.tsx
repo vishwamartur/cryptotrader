@@ -127,13 +127,15 @@ const OptimizedPriceCard = React.memo<OptimizedPriceCardProps>(({
 OptimizedPriceCard.displayName = 'OptimizedPriceCard';
 
 export function LivePriceFeedsOptimized({ theme, autoRefresh, refreshInterval }: LivePriceFeedsOptimizedProps) {
-  // Use WebSocket-based market data instead of REST API
+  // Use WebSocket-based market data with "all" symbol subscription for maximum performance
   const marketData = useWebSocketMarketData({
     autoConnect: true,
-    subscribeToMajorPairs: true,
+    subscribeToAllSymbols: true, // ✅ Use "all" symbol subscription for ALL cryptocurrency pairs
+    subscribeToMajorPairs: false, // Disable individual subscriptions since we're using "all"
     subscribeToAllProducts: false,
-    channels: ['ticker', 'l2_orderbook'],
-    maxSymbols: 200
+    channels: ['v2/ticker', 'l1_orderbook', 'all_trades'], // Enhanced channels for comprehensive real-time data
+    maxSymbols: 1000, // Allow all symbols for maximum coverage
+    environment: 'production'
   });
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'symbol' | 'price' | 'change' | 'volume'>('symbol');
