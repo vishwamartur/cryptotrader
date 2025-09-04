@@ -5,8 +5,8 @@
 
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { DeltaWebSocketClient, DeltaMarketData, DeltaOrderBookData, DeltaTradeData, DeltaWebSocketMessage } from '@/lib/delta-websocket';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { DeltaWebSocketClient, DeltaMarketData, DeltaOrderBookData, DeltaTradeData, DeltaWebSocketMessage, DeltaProduct } from '@/lib/delta-websocket';
 
 export interface UseDeltaWebSocketConfig {
   apiKey?: string;
@@ -18,26 +18,37 @@ export interface UseDeltaWebSocketConfig {
 export interface DeltaWebSocketState {
   isConnected: boolean;
   isConnecting: boolean;
+  isAuthenticated: boolean;
   error: string | null;
+  products: DeltaProduct[];
   marketData: Map<string, DeltaMarketData>;
   orderBooks: Map<string, DeltaOrderBookData>;
   trades: DeltaTradeData[];
+  subscriptions: Map<string, string[]>;
+  connectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error' | 'reconnecting';
   lastUpdate: Date;
+  lastHeartbeat: Date;
 }
 
 export function useDeltaWebSocket(config: UseDeltaWebSocketConfig = {}) {
   const [state, setState] = useState<DeltaWebSocketState>({
     isConnected: false,
     isConnecting: false,
+    isAuthenticated: false,
     error: null,
+    products: [],
     marketData: new Map(),
     orderBooks: new Map(),
     trades: [],
-    lastUpdate: new Date()
+    subscriptions: new Map(),
+    connectionStatus: 'disconnected',
+    lastUpdate: new Date(),
+    lastHeartbeat: new Date()
   });
 
   const clientRef = useRef<DeltaWebSocketClient | null>(null);
-  const subscriptionsRef = useRef<Set<string>>(new Set());
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const connectionStatusRef = useRef<'disconnected' | 'connecting' | 'connected' | 'error' | 'reconnecting'>('disconnected');
 
   // Initialize WebSocket client
   useEffect(() => {
@@ -85,37 +96,80 @@ export function useDeltaWebSocket(config: UseDeltaWebSocketConfig = {}) {
           console.log('[useDeltaWebSocket] ✅ Connected to Delta Exchange WebSocket');
           newState.isConnected = true;
           newState.isConnecting = false;
+          newState.connectionStatus = 'connected';
           newState.error = null;
+          newState.lastHeartbeat = new Date();
+          connectionStatusRef.current = 'connected';
           break;
 
         case 'disconnected':
           console.log('[useDeltaWebSocket] 🔌 Disconnected from Delta Exchange WebSocket');
           newState.isConnected = false;
           newState.isConnecting = false;
+          newState.isAuthenticated = false;
+          newState.connectionStatus = 'disconnected';
+          connectionStatusRef.current = 'disconnected';
           break;
 
         case 'error':
           console.error('[useDeltaWebSocket] ❌ WebSocket error:', message.data.message);
           newState.error = message.data.message;
           newState.isConnecting = false;
+          newState.connectionStatus = 'error';
+          connectionStatusRef.current = 'error';
+          break;
+
+        case 'auth_success':
+          console.log('[useDeltaWebSocket] ✅ Authentication successful');
+          newState.isAuthenticated = true;
+          newState.error = null;
+          break;
+
+        case 'auth_error':
+          console.error('[useDeltaWebSocket] ❌ Authentication failed:', message.data.message);
+          newState.isAuthenticated = false;
+          newState.error = `Authentication failed: ${message.data.message}`;
+          break;
+
+        case 'products':
+          console.log('[useDeltaWebSocket] 📦 Products discovered:', message.data.length);
+          newState.products = message.data;
+          break;
+
+        case 'subscription_success':
+          console.log('[useDeltaWebSocket] ✅ Subscription successful:', message.data.channel, message.data.symbols);
+          newState.subscriptions = new Map(prevState.subscriptions);
+          newState.subscriptions.set(message.data.channel, message.data.symbols);
+          break;
+
+        case 'subscription_error':
+          console.error('[useDeltaWebSocket] ❌ Subscription failed:', message.data.error);
+          newState.error = `Subscription failed: ${message.data.error}`;
           break;
 
         case 'ticker':
-          console.log('[useDeltaWebSocket] 📊 Ticker update:', message.data.symbol);
+          // Only log occasionally to avoid spam
+          if (Math.random() < 0.01) {
+            console.log('[useDeltaWebSocket] 📊 Ticker update:', message.data.symbol);
+          }
           newState.marketData = new Map(prevState.marketData);
           newState.marketData.set(message.data.symbol, message.data);
           newState.lastUpdate = new Date();
           break;
 
         case 'orderbook':
-          console.log('[useDeltaWebSocket] 📋 Order book update:', message.data.symbol);
+          if (Math.random() < 0.01) {
+            console.log('[useDeltaWebSocket] 📋 Order book update:', message.data.symbol);
+          }
           newState.orderBooks = new Map(prevState.orderBooks);
           newState.orderBooks.set(message.data.symbol, message.data);
           newState.lastUpdate = new Date();
           break;
 
         case 'trade':
-          console.log('[useDeltaWebSocket] 💱 Trade update:', message.data.symbol);
+          if (Math.random() < 0.1) {
+            console.log('[useDeltaWebSocket] 💱 Trade update:', message.data.symbol);
+          }
           newState.trades = [...prevState.trades.slice(-99), message.data]; // Keep last 100 trades
           newState.lastUpdate = new Date();
           break;
@@ -173,36 +227,73 @@ export function useDeltaWebSocket(config: UseDeltaWebSocketConfig = {}) {
     }));
   }, []);
 
-  // Subscribe to symbols
-  const subscribe = useCallback((symbols: string[]) => {
+  // Discover all available products
+  const discoverProducts = useCallback(async () => {
+    if (!clientRef.current) {
+      console.warn('[useDeltaWebSocket] WebSocket client not initialized');
+      return [];
+    }
+
+    try {
+      console.log('[useDeltaWebSocket] Discovering products...');
+      const products = await clientRef.current.discoverProducts();
+      return products;
+    } catch (error) {
+      console.error('[useDeltaWebSocket] Failed to discover products:', error);
+      setState(prevState => ({
+        ...prevState,
+        error: error instanceof Error ? error.message : 'Failed to discover products'
+      }));
+      return [];
+    }
+  }, []);
+
+  // Subscribe to symbols with specific channels
+  const subscribe = useCallback((symbols: string[], channels: string[] = ['ticker', 'l2_orderbook']) => {
     if (!clientRef.current) {
       console.warn('[useDeltaWebSocket] WebSocket client not initialized');
       return;
     }
 
-    console.log('[useDeltaWebSocket] Subscribing to symbols:', symbols);
-    
-    // Add to subscriptions
-    symbols.forEach(symbol => subscriptionsRef.current.add(symbol));
-    
+    console.log('[useDeltaWebSocket] Subscribing to symbols:', symbols, 'channels:', channels);
+
     // Subscribe via WebSocket
-    clientRef.current.subscribe(symbols);
+    clientRef.current.subscribe(symbols, channels);
+  }, []);
+
+  // Subscribe to all available products
+  const subscribeToAllProducts = useCallback((channels: string[] = ['ticker']) => {
+    if (!clientRef.current) {
+      console.warn('[useDeltaWebSocket] WebSocket client not initialized');
+      return;
+    }
+
+    console.log('[useDeltaWebSocket] Subscribing to all products');
+    clientRef.current.subscribeToAllProducts(channels);
+  }, []);
+
+  // Subscribe to major currency pairs
+  const subscribeToMajorPairs = useCallback((channels: string[] = ['ticker', 'l2_orderbook']) => {
+    if (!clientRef.current) {
+      console.warn('[useDeltaWebSocket] WebSocket client not initialized');
+      return;
+    }
+
+    console.log('[useDeltaWebSocket] Subscribing to major pairs');
+    clientRef.current.subscribeToMajorPairs(channels);
   }, []);
 
   // Unsubscribe from symbols
-  const unsubscribe = useCallback((symbols: string[]) => {
+  const unsubscribe = useCallback((symbols: string[], channels: string[] = ['ticker', 'l2_orderbook', 'recent_trade']) => {
     if (!clientRef.current) {
       console.warn('[useDeltaWebSocket] WebSocket client not initialized');
       return;
     }
 
-    console.log('[useDeltaWebSocket] Unsubscribing from symbols:', symbols);
-    
-    // Remove from subscriptions
-    symbols.forEach(symbol => subscriptionsRef.current.delete(symbol));
-    
+    console.log('[useDeltaWebSocket] Unsubscribing from symbols:', symbols, 'channels:', channels);
+
     // Unsubscribe via WebSocket
-    clientRef.current.unsubscribe(symbols);
+    clientRef.current.unsubscribe(symbols, channels);
   }, []);
 
   // Get market data for a specific symbol
@@ -229,37 +320,92 @@ export function useDeltaWebSocket(config: UseDeltaWebSocketConfig = {}) {
     return clientRef.current.getStatus();
   }, []);
 
-  // Get subscribed symbols
-  const getSubscriptions = useCallback((): string[] => {
-    return Array.from(subscriptionsRef.current);
+  // Get all subscriptions
+  const getSubscriptions = useCallback((channel?: string): string[] => {
+    if (!clientRef.current) return [];
+    return clientRef.current.getSubscriptions(channel);
   }, []);
 
+  // Get products by filter
+  const getProductsByFilter = useCallback((filter: (product: DeltaProduct) => boolean): DeltaProduct[] => {
+    return state.products.filter(filter);
+  }, [state.products]);
+
+  // Get active products
+  const getActiveProducts = useCallback((): DeltaProduct[] => {
+    return state.products.filter(product =>
+      product.state === 'live' && product.trading_status === 'operational'
+    );
+  }, [state.products]);
+
+  // Get major pairs
+  const getMajorPairs = useCallback((): DeltaProduct[] => {
+    const majorSymbols = [
+      'BTCUSDT', 'ETHUSDT', 'ADAUSDT', 'SOLUSDT', 'BNBUSDT',
+      'XRPUSDT', 'DOGEUSDT', 'MATICUSDT', 'DOTUSDT', 'AVAXUSDT'
+    ];
+    return state.products.filter(product => majorSymbols.includes(product.symbol));
+  }, [state.products]);
+
+  // Computed values using useMemo for performance
+  const computedValues = useMemo(() => {
+    const marketDataArray = Array.from(state.marketData.values());
+    const orderBooksArray = Array.from(state.orderBooks.values());
+    const allSubscriptions = Array.from(state.subscriptions.values()).flat();
+
+    return {
+      marketDataArray,
+      orderBooksArray,
+      subscribedSymbols: [...new Set(allSubscriptions)],
+      totalProducts: state.products.length,
+      activeProducts: state.products.filter(p => p.state === 'live').length,
+      connectedSymbols: marketDataArray.length,
+      lastPriceUpdate: marketDataArray.length > 0 ?
+        Math.max(...marketDataArray.map(data => data.timestamp)) : 0
+    };
+  }, [state.marketData, state.orderBooks, state.subscriptions, state.products]);
+
   return {
-    // State
+    // Connection State
     isConnected: state.isConnected,
     isConnecting: state.isConnecting,
+    isAuthenticated: state.isAuthenticated,
+    connectionStatus: state.connectionStatus,
     error: state.error,
+    lastUpdate: state.lastUpdate,
+    lastHeartbeat: state.lastHeartbeat,
+
+    // Data State
+    products: state.products,
     marketData: state.marketData,
     orderBooks: state.orderBooks,
     trades: state.trades,
-    lastUpdate: state.lastUpdate,
+    subscriptions: state.subscriptions,
 
-    // Actions
+    // Connection Actions
     connect,
     disconnect,
+
+    // Product Discovery
+    discoverProducts,
+    getActiveProducts,
+    getMajorPairs,
+    getProductsByFilter,
+
+    // Subscription Actions
     subscribe,
     unsubscribe,
+    subscribeToAllProducts,
+    subscribeToMajorPairs,
 
-    // Getters
+    // Data Getters
     getMarketData,
     getOrderBook,
     getRecentTrades,
     getConnectionStatus,
     getSubscriptions,
 
-    // Computed
-    subscribedSymbols: Array.from(subscriptionsRef.current),
-    marketDataArray: Array.from(state.marketData.values()),
-    orderBooksArray: Array.from(state.orderBooks.values())
+    // Computed Values
+    ...computedValues
   };
 }
