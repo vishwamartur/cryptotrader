@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { realtimeMarketData, RealtimeMarketData, ProductInfo } from '@/lib/realtime-market-data';
+import { getClientMarketData, RealtimeMarketData, ProductInfo } from '@/lib/client-market-data';
 
 export interface MarketDataError {
   type: string;
@@ -147,7 +147,7 @@ export function useDynamicMarketData(): MarketDataHookReturn {
 
   // Setup event listeners
   useEffect(() => {
-    const manager = realtimeMarketData;
+    const manager = getClientMarketData();
 
     // Add event listeners
     manager.on('productsLoaded', handleProductsLoaded);
@@ -211,40 +211,43 @@ export function useDynamicMarketData(): MarketDataHookReturn {
 
   // API methods
   const subscribe = useCallback((symbols: string[]) => {
-    realtimeMarketData.subscribe(symbols);
+    getClientMarketData().subscribe(symbols);
   }, []);
 
   const unsubscribe = useCallback((symbols: string[]) => {
-    realtimeMarketData.unsubscribe(symbols);
+    getClientMarketData().unsubscribe(symbols);
   }, []);
 
   const subscribeToAll = useCallback(() => {
-    realtimeMarketData.subscribeToAll();
+    // Client market data handles all symbols automatically
+    console.log('[Hook] Subscribe to all called');
   }, []);
 
   const getMarketData = useCallback((symbol: string) => {
-    return realtimeMarketData.getMarketData(symbol);
+    return getClientMarketData().getMarketData(symbol);
   }, []);
 
   const getProductsByType = useCallback((productType: string) => {
-    return realtimeMarketData.getProductsByType(productType);
+    // Filter products by type
+    const products = getClientMarketData().getProducts();
+    return products.filter(p => p.product_type === productType);
   }, []);
 
   const refresh = useCallback(async () => {
     updateState({ isLoading: true, error: null });
     try {
-      await realtimeMarketData.refresh();
+      await getClientMarketData().connect();
     } catch (error) {
       handleError(error);
     }
   }, [updateState, handleError]);
 
   const connect = useCallback(() => {
-    realtimeMarketData.connect();
+    getClientMarketData().connect();
   }, []);
 
   const disconnect = useCallback(() => {
-    realtimeMarketData.disconnect();
+    getClientMarketData().disconnect();
   }, []);
 
   return {

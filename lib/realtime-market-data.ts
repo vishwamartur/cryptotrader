@@ -3,7 +3,7 @@
 import { EventEmitter } from 'events';
 import { createDeltaWebSocketClient, DeltaWebSocketClient } from './delta-websocket-client';
 import { createDeltaWebSocketAPI, DeltaWebSocketAPI, RealtimeTickerData } from './delta-websocket-api';
-import { createDeltaExchangeAPIFromEnv } from './delta-exchange';
+import { createDeltaExchangeAPIFromEnv, getDeltaCredentials } from './delta-exchange';
 
 export interface RealtimeMarketData {
   symbol: string;
@@ -73,16 +73,28 @@ class RealtimeMarketDataManager extends EventEmitter {
   constructor() {
     super();
 
-    // Initialize WebSocket clients - will throw if credentials are missing
-    this.wsClient = createDeltaWebSocketClient();
-    const restClient = createDeltaExchangeAPIFromEnv();
-    this.wsAPI = createDeltaWebSocketAPI(this.wsClient, restClient);
+    try {
+      // Get credentials first
+      const restClient = createDeltaExchangeAPIFromEnv();
+      const credentials = getDeltaCredentials();
 
-    this.setupWebSocketEventHandlers();
-    this.setupNetworkMonitoring();
-    this.loadProducts();
+      // Initialize WebSocket client with credentials
+      this.wsClient = createDeltaWebSocketClient({
+        apiKey: credentials.apiKey,
+        apiSecret: credentials.apiSecret
+      });
 
-    console.log('[RealtimeMarketDataManager] Initialized successfully with live Delta Exchange connection');
+      this.wsAPI = createDeltaWebSocketAPI(this.wsClient, restClient);
+
+      this.setupWebSocketEventHandlers();
+      this.setupNetworkMonitoring();
+      this.loadProducts();
+
+      console.log('[RealtimeMarketDataManager] Initialized successfully with live Delta Exchange connection');
+    } catch (error) {
+      console.error('[RealtimeMarketDataManager] Failed to initialize:', error);
+      throw error; // Re-throw to prevent silent failures
+    }
   }
 
   // Setup WebSocket event handlers

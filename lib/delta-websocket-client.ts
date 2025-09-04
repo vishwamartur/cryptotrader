@@ -373,11 +373,32 @@ export class DeltaWebSocketClient extends EventEmitter {
 
 // Factory function to create client with environment credentials
 export function createDeltaWebSocketClient(config: Partial<DeltaWebSocketConfig> = {}): DeltaWebSocketClient {
-  // Try both naming conventions for backward compatibility
+  // Check if credentials are provided in config first (for server-side initialization)
+  if (config.apiKey && config.apiSecret) {
+    const defaultConfig: DeltaWebSocketConfig = {
+      apiKey: config.apiKey,
+      apiSecret: config.apiSecret,
+      baseUrl: process.env.NEXT_PUBLIC_DELTA_WS_URL || config.baseUrl || 'wss://socket.india.delta.exchange',
+      ...config,
+    };
+
+    console.log('[WebSocket Factory] Creating live WebSocket client with provided credentials');
+    return new DeltaWebSocketClient(defaultConfig);
+  }
+
+  // Try to get credentials from environment (server-side only)
   const apiKey = process.env.DELTA_API_KEY || process.env.DELTA_EXCHANGE_API_KEY;
   const apiSecret = process.env.DELTA_API_SECRET || process.env.DELTA_EXCHANGE_API_SECRET;
 
   if (!apiKey || !apiSecret) {
+    // Check if we're on the client side
+    if (typeof window !== 'undefined') {
+      throw new Error(
+        'Delta Exchange WebSocket client cannot be initialized on the client-side without credentials. ' +
+        'WebSocket connections should be initialized server-side or credentials should be passed via props.'
+      );
+    }
+
     throw new Error(
       'Delta Exchange WebSocket credentials are required. Please set DELTA_EXCHANGE_API_KEY and DELTA_EXCHANGE_API_SECRET environment variables. ' +
       'Get your API credentials from: https://www.delta.exchange/app/api-management'
