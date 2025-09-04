@@ -4,28 +4,26 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { TrendingUp, TrendingDown, RefreshCw, AlertCircle } from "lucide-react"
-import { useMarketData } from "@/hooks/use-market-data"
-import { useRealtimeMarket } from "@/hooks/use-realtime-market"
+import { useWebSocketMarketData } from "@/hooks/use-websocket-market-data"
 import { ConnectionStatus } from "@/components/connection-status"
 import { useEffect, useState } from "react"
 
 const MAJOR_SYMBOLS = ["BTCUSDT", "ETHUSDT", "ADAUSDT", "SOLUSDT", "MATICUSDT", "AVAXUSDT"]
 
 export function MarketOverview() {
-  const { marketData, loading, error, refetch } = useMarketData()
-  const [useRealtime, setUseRealtime] = useState(false)
+  // Use WebSocket-based market data instead of REST API
+  const marketData = useWebSocketMarketData({
+    autoConnect: true,
+    subscribeToMajorPairs: true,
+    subscribeToAllProducts: false,
+    channels: ['ticker'],
+    maxSymbols: 50
+  })
 
-  const realtimeData = useRealtimeMarket(useRealtime ? MAJOR_SYMBOLS : [])
+  // Convert WebSocket data to display format
+  const displayData = marketData.marketDataArray || []
 
-  useEffect(() => {
-    if (!loading && marketData.length > 0 && !useRealtime) {
-      setUseRealtime(true)
-    }
-  }, [loading, marketData.length, useRealtime])
-
-  const displayData = realtimeData.prices.length > 0 ? realtimeData.prices : marketData
-
-  if (loading && displayData.length === 0) {
+  if (marketData.isLoading && displayData.length === 0) {
     return (
       <Card>
         <CardHeader>
@@ -54,13 +52,13 @@ export function MarketOverview() {
     )
   }
 
-  if (error && displayData.length === 0) {
+  if (marketData.error && displayData.length === 0) {
     return (
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
             Market Overview
-            <Button variant="ghost" size="sm" onClick={refetch}>
+            <Button variant="ghost" size="sm" onClick={marketData.connect}>
               <RefreshCw className="h-4 w-4" />
             </Button>
           </CardTitle>
@@ -68,7 +66,7 @@ export function MarketOverview() {
         <CardContent>
           <div className="flex items-center gap-2 p-4 rounded-lg border border-destructive/20 bg-destructive/5">
             <AlertCircle className="h-4 w-4 text-destructive" />
-            <p className="text-sm text-destructive">{error}</p>
+            <p className="text-sm text-destructive">{marketData.error}</p>
           </div>
         </CardContent>
       </Card>
@@ -82,12 +80,12 @@ export function MarketOverview() {
           Market Overview
           <div className="flex items-center gap-2">
             <ConnectionStatus
-              isConnected={realtimeData.isConnected}
-              error={realtimeData.error}
-              reconnectAttempts={realtimeData.reconnectAttempts}
-              lastUpdate={realtimeData.lastUpdate}
+              isConnected={marketData.isConnected}
+              error={marketData.error}
+              reconnectAttempts={0}
+              lastUpdate={marketData.lastUpdate?.getTime() || 0}
             />
-            <Button variant="ghost" size="sm" onClick={refetch}>
+            <Button variant="ghost" size="sm" onClick={marketData.connect}>
               <RefreshCw className="h-4 w-4" />
             </Button>
           </div>

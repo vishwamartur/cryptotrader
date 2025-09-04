@@ -2,6 +2,31 @@
 
 import { useState, useEffect } from "react"
 
+/**
+ * @deprecated This hook is deprecated and will be removed in a future version.
+ * Please use `useWebSocketMarketData` from '@/hooks/use-websocket-market-data' instead.
+ *
+ * The WebSocket-based hook provides:
+ * - Real-time data updates via WebSocket connection
+ * - Better performance with reduced API calls
+ * - Improved error handling and connection management
+ * - Consistent data structure and type safety
+ *
+ * Migration example:
+ * ```typescript
+ * // Old (deprecated)
+ * import { useMarketData } from '@/hooks/use-market-data'
+ * const { marketData, loading, error } = useMarketData()
+ *
+ * // New (recommended)
+ * import { useWebSocketMarketData } from '@/hooks/use-websocket-market-data'
+ * const marketData = useWebSocketMarketData({
+ *   autoConnect: true,
+ *   subscribeToMajorPairs: true
+ * })
+ * ```
+ */
+
 interface Product {
   id: number
   symbol: string
@@ -39,6 +64,15 @@ interface MarketData {
 }
 
 export function useMarketData() {
+  // Show deprecation warning in development
+  if (process.env.NODE_ENV === 'development') {
+    console.warn(
+      '⚠️ DEPRECATED: useMarketData is deprecated and will be removed in a future version.\n' +
+      '   Please migrate to useWebSocketMarketData for real-time data streaming.\n' +
+      '   See: /hooks/use-websocket-market-data.ts'
+    );
+  }
+
   const [marketData, setMarketData] = useState<MarketData[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)

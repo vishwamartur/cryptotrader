@@ -12,7 +12,7 @@ import { Separator } from "@/components/ui/separator"
 import { Shield, AlertTriangle, TrendingDown, TrendingUp, Target, Settings, AlertCircle } from "lucide-react"
 import { RiskManager, type RiskLimits, type RiskMetrics, type RiskAlert } from "@/lib/risk-management"
 import { usePortfolio } from "@/hooks/use-portfolio"
-import { useMarketData } from "@/hooks/use-market-data"
+import { useWebSocketMarketData } from "@/hooks/use-websocket-market-data"
 
 export function RiskDashboard() {
   const [riskManager, setRiskManager] = useState<RiskManager | null>(null)
@@ -30,7 +30,15 @@ export function RiskDashboard() {
   })
 
   const { portfolioData } = usePortfolio(null)
-  const { marketData } = useMarketData()
+
+  // Use WebSocket-based market data instead of REST API
+  const marketDataWS = useWebSocketMarketData({
+    autoConnect: true,
+    subscribeToMajorPairs: true,
+    subscribeToAllProducts: false,
+    channels: ['ticker'],
+    maxSymbols: 50
+  })
 
   // Memoize positions and balance to prevent unnecessary re-renders
   const positions = useMemo(() => {
@@ -38,13 +46,13 @@ export function RiskDashboard() {
   }, [portfolioData?.positions])
 
   const balance = useMemo(() => {
-    return portfolioData?.balance || { total: 0, available: 0, reserved: 0 }
-  }, [portfolioData?.balance])
+    return portfolioData?.balances || { total: 0, available: 0, reserved: 0 }
+  }, [portfolioData?.balances])
 
   // Memoize market data to prevent unnecessary re-renders
   const stableMarketData = useMemo(() => {
-    return marketData || []
-  }, [marketData])
+    return marketDataWS.marketDataArray || []
+  }, [marketDataWS.marketDataArray])
 
   useEffect(() => {
     const manager = new RiskManager(limits)
