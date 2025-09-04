@@ -50,16 +50,19 @@ export function useMarketData() {
         setError(null)
 
         // First, get available products
+        console.log("[MarketData] Fetching products from API...")
         const productsResponse = await fetch("/api/market/products")
 
         if (!productsResponse.ok) {
-          throw new Error(`Failed to fetch products: ${productsResponse.status} ${productsResponse.statusText}`)
+          const errorText = await productsResponse.text().catch(() => 'Unable to read error response');
+          throw new Error(`Failed to fetch products: ${productsResponse.status} ${productsResponse.statusText} - ${errorText}`)
         }
 
         const productsData = await productsResponse.json()
+        console.log("[MarketData] Products response:", { success: productsData.success, dataType: typeof productsData });
 
         if (!productsData.success) {
-          throw new Error(productsData.error || "Failed to fetch products")
+          throw new Error(productsData.error || productsData.details || "Failed to fetch products")
         }
 
         // Handle different response structures (products vs result)
@@ -128,19 +131,23 @@ export function useMarketData() {
           .join(",")
 
         if (!symbols) {
+          console.warn("[MarketData] No valid symbols found for ticker data - using fallback");
           throw new Error("No valid symbols found for ticker data")
         }
 
+        console.log("[MarketData] Fetching tickers for symbols:", symbols.split(',').length, "symbols");
         const tickersResponse = await fetch(`/api/market/tickers?symbols=${symbols}`)
 
         if (!tickersResponse.ok) {
-          throw new Error(`Failed to fetch tickers: ${tickersResponse.status} ${tickersResponse.statusText}`)
+          const errorText = await tickersResponse.text().catch(() => 'Unable to read error response');
+          throw new Error(`Failed to fetch tickers: ${tickersResponse.status} ${tickersResponse.statusText} - ${errorText}`)
         }
 
         const tickersData = await tickersResponse.json()
+        console.log("[MarketData] Tickers response:", { success: tickersData.success, tickersCount: tickersData.tickers?.length || 0 });
 
         if (!tickersData.success) {
-          throw new Error(tickersData.error || "Failed to fetch ticker data")
+          throw new Error(tickersData.error || tickersData.details || "Failed to fetch ticker data")
         }
 
         const availableTickers = tickersData.tickers || tickersData.result || []
@@ -173,21 +180,38 @@ export function useMarketData() {
           })
 
         if (transformedData.length === 0) {
-          throw new Error("No valid market data could be processed")
+          console.warn("No valid market data could be processed - using fallback data")
+          // Provide fallback data instead of throwing error
+          const fallbackData = [{
+            symbol: "BTCUSDT",
+            price: "0",
+            change: "0",
+            changePercent: "0",
+            volume: "0",
+            high: "0",
+            low: "0"
+          }];
+          setMarketData(fallbackData);
+          setError("No market data available - showing fallback data");
+        } else {
+          setMarketData(transformedData)
+          console.log("Market data loaded:", transformedData.length, "pairs")
         }
-
-        setMarketData(transformedData)
-        console.log("Market data loaded:", transformedData.length, "pairs")
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : "Failed to fetch market data"
         console.error("Error fetching market data:", err)
 
-        // Enhanced error logging with context
-        console.error("Market data fetch error details:", {
+        // Enhanced error logging with meaningful context
+        const errorDetails = {
           error: errorMessage,
+          errorType: err instanceof Error ? err.constructor.name : 'Unknown',
           timestamp: new Date().toISOString(),
-          url: typeof window !== 'undefined' ? window.location.href : 'server'
-        })
+          url: typeof window !== 'undefined' ? window.location.href : 'server',
+          stack: err instanceof Error ? err.stack : 'No stack trace',
+          fetchAttempt: 'market-data-fetch'
+        };
+
+        console.error("Market data fetch error details:", errorDetails)
 
         setError(errorMessage)
 

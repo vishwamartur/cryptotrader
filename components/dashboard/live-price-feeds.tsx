@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 
 // Utility function for safe number formatting
 const safeToFixed = (value: number | null | undefined, decimals: number = 2): string => {
@@ -203,14 +203,19 @@ export function LivePriceFeeds({ theme, autoRefresh, refreshInterval }: LivePric
   const [displayLimit, setDisplayLimit] = useState(20);
   const [isClient, setIsClient] = useState(false);
 
+  // Use ref to track if we've already subscribed to prevent infinite loops
+  const hasSubscribed = useRef(false);
+
   // Handle client-side hydration to prevent mismatch
   useEffect(() => {
     setIsClient(true);
   }, []);
 
-  // Auto-connect when component mounts
-  useEffect(() => {
-    if (!marketData.isConnected && marketData.products.length > 0) {
+  // Memoize the subscription function to prevent unnecessary re-renders
+  const subscribeToDefaultSymbols = useCallback(() => {
+    if (!hasSubscribed.current && !marketData.isConnected && marketData.products.length > 0) {
+      console.log('[LivePriceFeeds] Subscribing to default symbols');
+
       // Subscribe to top perpetual futures by default
       const topSymbols = marketData.products
         .filter(p => p.productType === 'perpetual_futures')
@@ -219,9 +224,15 @@ export function LivePriceFeeds({ theme, autoRefresh, refreshInterval }: LivePric
 
       if (topSymbols.length > 0) {
         marketData.subscribe(topSymbols);
+        hasSubscribed.current = true;
       }
     }
-  }, [marketData.products, marketData.isConnected, marketData]);
+  }, [marketData.products.length, marketData.isConnected, marketData.subscribe]);
+
+  // Auto-connect when component mounts - fixed dependency array
+  useEffect(() => {
+    subscribeToDefaultSymbols();
+  }, [subscribeToDefaultSymbols]);
 
   // Filter and sort products
   const filteredProducts = useMemo(() => {
@@ -244,11 +255,16 @@ export function LivePriceFeeds({ theme, autoRefresh, refreshInterval }: LivePric
     return filtered;
   }, [marketData.products, searchTerm, productTypeFilter]);
 
+  // Memoize market data map to prevent unnecessary re-renders
+  const marketDataMap = useMemo(() => {
+    return marketData.marketData;
+  }, [marketData.marketData]);
+
   // Sort products with market data
   const sortedProducts = useMemo(() => {
     return [...filteredProducts].sort((a, b) => {
-      const aData = marketData.marketData.get(a.symbol);
-      const bData = marketData.marketData.get(b.symbol);
+      const aData = marketDataMap.get(a.symbol);
+      const bData = marketDataMap.get(b.symbol);
 
       let comparison = 0;
       switch (sortBy) {
@@ -273,7 +289,7 @@ export function LivePriceFeeds({ theme, autoRefresh, refreshInterval }: LivePric
 
       return sortOrder === 'asc' ? comparison : -comparison;
     }).slice(0, displayLimit);
-  }, [filteredProducts, marketData.marketData, sortBy, sortOrder, displayLimit]);
+  }, [filteredProducts, marketDataMap, sortBy, sortOrder, displayLimit]);
 
   const handleSort = (criteria: 'symbol' | 'price' | 'change' | 'volume') => {
     if (sortBy === criteria) {
