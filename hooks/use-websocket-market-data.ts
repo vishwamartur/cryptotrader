@@ -28,8 +28,10 @@ export interface UseWebSocketMarketDataConfig {
   autoConnect?: boolean;
   subscribeToMajorPairs?: boolean;
   subscribeToAllProducts?: boolean;
+  subscribeToAllSymbols?: boolean; // New: Use "all" keyword for efficient subscription
   channels?: string[];
   maxSymbols?: number;
+  environment?: 'production' | 'testnet'; // New: Environment selection
 }
 
 export function useWebSocketMarketData(config: UseWebSocketMarketDataConfig = {}) {
@@ -37,33 +39,39 @@ export function useWebSocketMarketData(config: UseWebSocketMarketDataConfig = {}
     autoConnect = true,
     subscribeToMajorPairs = true,
     subscribeToAllProducts = false,
+    subscribeToAllSymbols = false,
     channels = ['ticker'],
-    maxSymbols = 100
+    maxSymbols = 100,
+    environment = 'production'
   } = config;
 
   const [isInitialized, setIsInitialized] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Use the Delta WebSocket hook
+  // Use the Delta WebSocket hook with environment configuration
   const deltaWS = useDeltaWebSocket({
     autoConnect,
-    reconnectAttempts: 10
+    reconnectAttempts: 10,
+    environment
   });
 
   // Initialize subscriptions when connected and products are available
   useEffect(() => {
     if (deltaWS.isConnected && deltaWS.products.length > 0 && !isInitialized) {
       console.log('[useWebSocketMarketData] Initializing subscriptions...');
-      
+
       try {
-        if (subscribeToAllProducts) {
-          console.log('[useWebSocketMarketData] Subscribing to all products');
+        if (subscribeToAllSymbols) {
+          console.log('[useWebSocketMarketData] 🌐 Subscribing to ALL symbols using "all" keyword');
+          deltaWS.subscribeToAllSymbols(channels);
+        } else if (subscribeToAllProducts) {
+          console.log('[useWebSocketMarketData] Subscribing to all products individually');
           deltaWS.subscribeToAllProducts(channels);
         } else if (subscribeToMajorPairs) {
           console.log('[useWebSocketMarketData] Subscribing to major pairs');
           deltaWS.subscribeToMajorPairs(channels);
         }
-        
+
         setIsInitialized(true);
         setError(null);
       } catch (err) {
@@ -71,7 +79,7 @@ export function useWebSocketMarketData(config: UseWebSocketMarketDataConfig = {}
         setError(err instanceof Error ? err.message : 'Failed to initialize subscriptions');
       }
     }
-  }, [deltaWS.isConnected, deltaWS.products.length, isInitialized, subscribeToAllProducts, subscribeToMajorPairs, channels, deltaWS]);
+  }, [deltaWS.isConnected, deltaWS.products.length, isInitialized, subscribeToAllSymbols, subscribeToAllProducts, subscribeToMajorPairs, channels, deltaWS]);
 
   // Convert WebSocket market data to the expected format
   const marketData = useMemo((): MarketDataItem[] => {
@@ -125,6 +133,12 @@ export function useWebSocketMarketData(config: UseWebSocketMarketDataConfig = {}
   const subscribeToSymbols = useCallback((symbols: string[], subscriptionChannels?: string[]) => {
     console.log('[useWebSocketMarketData] Subscribing to additional symbols:', symbols);
     deltaWS.subscribe(symbols, subscriptionChannels || channels);
+  }, [deltaWS, channels]);
+
+  // Subscribe to ALL symbols using "all" keyword
+  const subscribeToAllSymbolsMethod = useCallback((subscriptionChannels?: string[]) => {
+    console.log('[useWebSocketMarketData] 🌐 Subscribing to ALL symbols using "all" keyword');
+    deltaWS.subscribeToAllSymbols(subscriptionChannels || channels);
   }, [deltaWS, channels]);
 
   // Unsubscribe from symbols
@@ -257,6 +271,7 @@ export function useWebSocketMarketData(config: UseWebSocketMarketDataConfig = {}
     unsubscribeFromSymbols,
     subscribeToAllProducts: deltaWS.subscribeToAllProducts,
     subscribeToMajorPairs: deltaWS.subscribeToMajorPairs,
+    subscribeToAllSymbols: subscribeToAllSymbolsMethod, // New: Subscribe to ALL symbols using "all" keyword
     subscribe: subscribeToSymbols, // Add subscribe alias for backward compatibility
 
     // Data Getters

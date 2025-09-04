@@ -279,17 +279,129 @@ export class DeltaWebSocketClient {
   }
 
   /**
+   * Validate channels that support "all" symbol subscription
+   */
+  private validateChannelsForAllSubscription(channels: string[]): string[] {
+    const allSupportedChannels = [
+      'v2/ticker',
+      'ticker',
+      'l1_orderbook',
+      'all_trades',
+      'funding_rate',
+      'mark_price',
+      'announcements'
+    ];
+
+    const validChannels = channels.filter(channel => {
+      const isSupported = allSupportedChannels.includes(channel);
+      if (!isSupported) {
+        console.warn(`[DeltaWebSocket] Channel "${channel}" does not support "all" symbol subscription`);
+      }
+      return isSupported;
+    });
+
+    console.log(`[DeltaWebSocket] Valid channels for "all" subscription:`, validChannels);
+    return validChannels;
+  }
+
+  /**
+   * Validate symbol subscriptions against channel limits
+   */
+  private validateSymbolSubscriptions(symbols: string[], channels: string[]): Array<{channel: string, validSymbols: string[]}> {
+    const channelLimits: Record<string, number> = {
+      'l2_orderbook': 20,
+      'l2_updates': 100,
+      'v2/ticker': -1, // No limit
+      'ticker': -1, // No limit
+      'l1_orderbook': -1, // No limit
+      'all_trades': -1, // No limit
+      'funding_rate': -1, // No limit
+      'mark_price': -1, // No limit
+      'announcements': -1, // No limit
+      'orders': -1, // Private channel, no limit
+      'positions': -1, // Private channel, no limit
+      'trading_notifications': -1 // Private channel, no limit
+    };
+
+    return channels.map(channel => {
+      const limit = channelLimits[channel] || -1;
+
+      if (limit === -1) {
+        // No limit for this channel
+        return { channel, validSymbols: symbols };
+      }
+
+      // Count current subscriptions for this channel
+      const currentCount = this.subscriptions.get(channel)?.size || 0;
+      const availableSlots = Math.max(0, limit - currentCount);
+
+      if (availableSlots === 0) {
+        console.warn(`[DeltaWebSocket] Channel "${channel}" has reached its limit of ${limit} symbols`);
+        return { channel, validSymbols: [] };
+      }
+
+      const validSymbols = symbols.slice(0, availableSlots);
+
+      if (validSymbols.length < symbols.length) {
+        console.warn(`[DeltaWebSocket] Channel "${channel}" can only accept ${validSymbols.length} of ${symbols.length} requested symbols (limit: ${limit})`);
+      }
+
+      return { channel, validSymbols };
+    });
+  }
+
+  /**
    * Subscribe to market data for symbols
    */
   subscribe(symbols: string[], channels: string[] = ['ticker', 'l2_orderbook', 'recent_trade']): void {
     console.log('[DeltaWebSocket] Subscribing to symbols:', symbols, 'channels:', channels);
 
+    // Handle "all" symbol subscription
+    if (symbols.length === 1 && symbols[0] === 'all') {
+      console.log('[DeltaWebSocket] 🌐 Subscribing to ALL symbols for channels:', channels);
+
+      // Validate channels that support "all" subscription
+      const validChannels = this.validateChannelsForAllSubscription(channels);
+      if (validChannels.length === 0) {
+        console.warn('[DeltaWebSocket] No valid channels for "all" subscription');
+        return;
+      }
+
+      // Store "all" subscriptions for reconnection
+      validChannels.forEach(channel => {
+        if (!this.subscriptions.has(channel)) {
+          this.subscriptions.set(channel, new Set());
+        }
+        this.subscriptions.get(channel)!.add('all');
+      });
+
+      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+        console.warn('[DeltaWebSocket] Not connected, "all" subscriptions stored for later');
+        return;
+      }
+
+      // Send "all" subscription requests
+      validChannels.forEach(channel => {
+        this.send({
+          type: 'subscribe',
+          payload: {
+            channels: [{ name: channel, symbols: ['all'] }]
+          }
+        });
+      });
+      console.log('[DeltaWebSocket] ✅ Sent "all" subscription for channels:', validChannels);
+      return;
+    }
+
+    // Handle specific symbol subscriptions with limits validation
+    const validatedSubscriptions = this.validateSymbolSubscriptions(symbols, channels);
+
     // Store subscriptions for reconnection
-    channels.forEach(channel => {
+    validatedSubscriptions.forEach(({ channel, validSymbols }) => {
       if (!this.subscriptions.has(channel)) {
         this.subscriptions.set(channel, new Set());
       }
-      symbols.forEach(symbol => {
+      validSymbols.forEach(symbol => {
         this.subscriptions.get(channel)!.add(symbol);
       });
     });
@@ -299,15 +411,18 @@ export class DeltaWebSocketClient {
       return;
     }
 
-    // Send subscription requests
-    channels.forEach(channel => {
-      this.send({
-        type: 'subscribe',
-        payload: {
-          channels: [{ name: channel, symbols: symbols }]
-        }
-      });
+    // Send subscription requests for validated symbols
+    validatedSubscriptions.forEach(({ channel, validSymbols }) => {
+      if (validSymbols.length > 0) {
+        this.send({
+          type: 'subscribe',
+          payload: {
+            channels: [{ name: channel, symbols: validSymbols }]
+          }
+        });
+      }
     });
+    console.log('[DeltaWebSocket] ✅ Sent subscriptions for validated symbols');
   }
 
   /**
@@ -338,7 +453,7 @@ export class DeltaWebSocketClient {
   }
 
   /**
-   * Subscribe to all available products
+   * Subscribe to all available products using individual symbols
    */
   subscribeToAllProducts(channels: string[] = ['ticker']): void {
     if (this.products.length === 0) {
@@ -350,8 +465,35 @@ export class DeltaWebSocketClient {
       .filter(product => product.state === 'live' && product.trading_status === 'operational')
       .map(product => product.symbol);
 
-    console.log(`[DeltaWebSocket] Subscribing to all ${symbols.length} active products`);
+    console.log(`[DeltaWebSocket] Subscribing to all ${symbols.length} active products individually`);
     this.subscribe(symbols, channels);
+  }
+
+  /**
+   * Subscribe to ALL symbols using Delta Exchange "all" keyword
+   * This is more efficient than subscribing to individual symbols
+   */
+  subscribeToAllSymbols(channels: string[] = ['ticker', 'v2/ticker']): void {
+    console.log('[DeltaWebSocket] 🌐 Subscribing to ALL symbols using "all" keyword');
+
+    // Filter channels that support "all" subscription
+    const validChannels = this.validateChannelsForAllSubscription(channels);
+
+    if (validChannels.length === 0) {
+      console.warn('[DeltaWebSocket] No valid channels for "all" subscription, falling back to individual products');
+      this.subscribeToAllProducts(channels);
+      return;
+    }
+
+    // Use the "all" keyword for efficient subscription
+    this.subscribe(['all'], validChannels);
+
+    // For channels that don't support "all", subscribe individually
+    const unsupportedChannels = channels.filter(ch => !validChannels.includes(ch));
+    if (unsupportedChannels.length > 0) {
+      console.log('[DeltaWebSocket] Subscribing to unsupported channels individually:', unsupportedChannels);
+      this.subscribeToAllProducts(unsupportedChannels);
+    }
   }
 
   /**

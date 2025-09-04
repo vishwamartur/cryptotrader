@@ -5,9 +5,12 @@ export interface DeltaWebSocketConfig {
   apiKey?: string;
   apiSecret?: string;
   baseUrl?: string;
+  environment?: 'production' | 'testnet'; // New: Environment selection
   reconnectInterval?: number;
   maxReconnectAttempts?: number;
   heartbeatInterval?: number;
+  connectionTimeout?: number;
+  authTimeout?: number;
 }
 
 export interface SubscriptionChannel {
@@ -46,13 +49,24 @@ export class DeltaWebSocketClient extends EventEmitter {
   constructor(config: DeltaWebSocketConfig = {}) {
     super();
     
+    // Environment URLs
+    const environmentUrls = {
+      production: 'wss://socket.india.delta.exchange',
+      testnet: 'wss://socket.testnet.deltaex.org'
+    };
+
+    const environment = config.environment || 'production';
+
     this.config = {
       apiKey: config.apiKey || '',
       apiSecret: config.apiSecret || '',
-      baseUrl: config.baseUrl || 'wss://socket.india.delta.exchange',
+      baseUrl: config.baseUrl || environmentUrls[environment],
+      environment,
       reconnectInterval: config.reconnectInterval || 5000,
       maxReconnectAttempts: config.maxReconnectAttempts || 10,
       heartbeatInterval: config.heartbeatInterval || 30000,
+      connectionTimeout: config.connectionTimeout || 15000,
+      authTimeout: config.authTimeout || 10000
     };
 
     this.connectionStatus = {
@@ -200,24 +214,90 @@ export class DeltaWebSocketClient extends EventEmitter {
     if (!this.connectionStatus.connected) {
       // Queue subscriptions for when connection is established
       this.subscriptionQueue.push(...channels);
+      console.log('[DeltaWS] Queued subscriptions for later:', channels);
+      return;
+    }
+
+    // Validate and process channels for "all" symbol support
+    const processedChannels = this.processChannelsForSubscription(channels);
+
+    if (processedChannels.length === 0) {
+      console.warn('[DeltaWS] No valid channels to subscribe to');
       return;
     }
 
     const subscribeMessage = {
       type: 'subscribe',
-      payload: { channels },
+      payload: { channels: processedChannels },
     };
 
-    console.log('[DeltaWS] Subscribing to channels:', channels);
+    console.log('[DeltaWS] Subscribing to channels:', processedChannels);
     this.sendMessage(subscribeMessage);
 
     // Track subscriptions
-    channels.forEach(channel => {
+    processedChannels.forEach(channel => {
       const key = `${channel.name}:${channel.symbols.join(',')}`;
       this.connectionStatus.subscriptions.set(key, channel);
     });
 
-    this.emit('subscribed', channels);
+    this.emit('subscribed', processedChannels);
+  }
+
+  /**
+   * Subscribe to ALL symbols using "all" keyword
+   */
+  subscribeToAllSymbols(channelNames: string[]): void {
+    console.log('[DeltaWS] 🌐 Subscribing to ALL symbols for channels:', channelNames);
+
+    // Create channels with "all" symbol
+    const channels: SubscriptionChannel[] = channelNames.map(name => ({
+      name,
+      symbols: ['all']
+    }));
+
+    this.subscribe(channels);
+  }
+
+  /**
+   * Process channels for subscription, handling "all" symbol validation
+   */
+  private processChannelsForSubscription(channels: SubscriptionChannel[]): SubscriptionChannel[] {
+    const channelsWithAllSupport = [
+      'v2/ticker',
+      'ticker',
+      'l1_orderbook',
+      'all_trades',
+      'funding_rate',
+      'mark_price',
+      'announcements'
+    ];
+
+    const channelLimits: Record<string, number> = {
+      'l2_orderbook': 20,
+      'l2_updates': 100
+    };
+
+    return channels.filter(channel => {
+      // Check if channel uses "all" symbol
+      if (channel.symbols.length === 1 && channel.symbols[0] === 'all') {
+        if (!channelsWithAllSupport.includes(channel.name)) {
+          console.warn(`[DeltaWS] Channel "${channel.name}" does not support "all" symbol subscription`);
+          return false;
+        }
+        console.log(`[DeltaWS] ✅ Channel "${channel.name}" supports "all" symbol subscription`);
+        return true;
+      }
+
+      // Check channel limits for specific symbols
+      const limit = channelLimits[channel.name];
+      if (limit && channel.symbols.length > limit) {
+        console.warn(`[DeltaWS] Channel "${channel.name}" exceeds limit of ${limit} symbols (requested: ${channel.symbols.length})`);
+        // Truncate to limit
+        channel.symbols = channel.symbols.slice(0, limit);
+      }
+
+      return true;
+    });
   }
 
   unsubscribe(channels: SubscriptionChannel[]): void {
