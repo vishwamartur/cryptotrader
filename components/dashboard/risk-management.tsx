@@ -4,7 +4,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { AlertTriangle, Shield, TrendingDown } from 'lucide-react';
-import { useRealtimeData } from '@/hooks/use-realtime-data';
+import { useWebSocketMarketData } from '@/hooks/use-websocket-market-data';
+import { useWebSocketPortfolio } from '@/hooks/use-websocket-portfolio';
 
 interface RiskManagementProps {
   theme: 'light' | 'dark';
@@ -13,7 +14,19 @@ interface RiskManagementProps {
 }
 
 export function RiskManagement({ theme }: RiskManagementProps) {
-  const { portfolio } = useRealtimeData();
+  // Use WebSocket-based portfolio data for real-time risk calculations
+  const portfolio = useWebSocketPortfolio({
+    autoConnect: true,
+    environment: 'production',
+    enableMockFallback: true
+  });
+
+  // Use WebSocket-based market data for risk analysis
+  const marketData = useWebSocketMarketData({
+    autoConnect: true,
+    subscribeToAllSymbols: true,
+    channels: ['v2/ticker']
+  });
   
   const riskMetrics = {
     portfolioRisk: 35, // 0-100 scale

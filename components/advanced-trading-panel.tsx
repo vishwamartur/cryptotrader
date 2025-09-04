@@ -13,8 +13,8 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Zap, Target, TrendingUp, BarChart3, Play, Layers, Clock, Shield } from "lucide-react"
 import { advancedOrderManager, type AdvancedOrder } from "@/lib/advanced-order-types"
 import { portfolioOptimizer } from "@/lib/portfolio-optimizer"
-import { useMarketData } from "@/hooks/use-market-data"
-import { usePortfolio } from "@/hooks/use-portfolio"
+import { useWebSocketMarketData } from "@/hooks/use-websocket-market-data"
+import { useWebSocketPortfolio } from "@/hooks/use-websocket-portfolio"
 
 export function AdvancedTradingPanel() {
   const [selectedOrderType, setSelectedOrderType] = useState<"ICEBERG" | "TWAP" | "BRACKET" | "TRAILING_STOP">(
@@ -35,8 +35,28 @@ export function AdvancedTradingPanel() {
   const [activeOrders, setActiveOrders] = useState<AdvancedOrder[]>([])
   const [optimizationResult, setOptimizationResult] = useState<any>(null)
 
-  const { marketData } = useMarketData()
-  const { positions, balance } = usePortfolio()
+  // Use WebSocket-based market data for real-time updates
+  const marketDataWS = useWebSocketMarketData({
+    autoConnect: true,
+    subscribeToAllSymbols: true,
+    channels: ['v2/ticker']
+  })
+
+  // Use WebSocket-based portfolio data for real-time updates
+  const portfolio = useWebSocketPortfolio({
+    autoConnect: true,
+    environment: 'production',
+    enableMockFallback: true
+  })
+
+  // Convert WebSocket data to expected format for backward compatibility
+  const marketData = marketDataWS.marketDataArray
+  const positions = portfolio.positions || []
+  const balance = {
+    total: parseFloat(portfolio.summary?.totalBalance || '0'),
+    available: parseFloat(portfolio.summary?.availableBalance || '0'),
+    reserved: parseFloat(portfolio.summary?.reservedBalance || '0')
+  }
 
   const handleCreateOrder = () => {
     let order: AdvancedOrder

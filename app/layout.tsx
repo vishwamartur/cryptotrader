@@ -7,6 +7,7 @@ import { Analytics } from "@vercel/analytics/next"
 import { SpeedInsights } from "@vercel/speed-insights/next"
 import { ClientBody } from "@/components/client-body"
 import { NoSSR } from "@/components/no-ssr"
+import ErrorBoundary from "@/components/error-boundary"
 
 const geistSans = Geist({
   subsets: ["latin"],

@@ -13,6 +13,7 @@ export interface UseDeltaWebSocketConfig {
   apiSecret?: string;
   autoConnect?: boolean;
   reconnectAttempts?: number;
+  environment?: 'production' | 'testnet';
 }
 
 export interface DeltaWebSocketState {
@@ -54,17 +55,25 @@ export function useDeltaWebSocket(config: UseDeltaWebSocketConfig = {}) {
   useEffect(() => {
     console.log('[useDeltaWebSocket] Initializing WebSocket client');
 
-    // Get credentials from environment if not provided
-    const apiKey = config.apiKey || process.env.NEXT_PUBLIC_DELTA_EXCHANGE_API_KEY || '';
-    const apiSecret = config.apiSecret || process.env.NEXT_PUBLIC_DELTA_EXCHANGE_API_SECRET || '';
+    // Use provided credentials only - never load from client-side environment variables for security
+    const apiKey = config.apiKey || '';
+    const apiSecret = config.apiSecret || '';
 
     if (!apiKey || !apiSecret) {
       console.warn('[useDeltaWebSocket] No API credentials provided, WebSocket will connect without authentication');
+      console.warn('[useDeltaWebSocket] For authenticated connections, pass apiKey and apiSecret via config parameter');
     }
+
+    // Set base URL based on environment
+    const environment = config.environment || 'production';
+    const baseUrl = environment === 'testnet'
+      ? 'wss://socket.testnet.deltaex.org'
+      : 'wss://socket.india.delta.exchange';
 
     clientRef.current = new DeltaWebSocketClient({
       apiKey,
       apiSecret,
+      baseUrl,
       reconnectAttempts: config.reconnectAttempts || 10
     });
 
@@ -217,7 +226,6 @@ export function useDeltaWebSocket(config: UseDeltaWebSocketConfig = {}) {
 
     console.log('[useDeltaWebSocket] Disconnecting from Delta Exchange WebSocket...');
     clientRef.current.disconnect();
-    subscriptionsRef.current.clear();
 
     setState(prevState => ({
       ...prevState,
@@ -281,6 +289,17 @@ export function useDeltaWebSocket(config: UseDeltaWebSocketConfig = {}) {
 
     console.log('[useDeltaWebSocket] Subscribing to major pairs');
     clientRef.current.subscribeToMajorPairs(channels);
+  }, []);
+
+  // Subscribe to ALL symbols using "all" keyword
+  const subscribeToAllSymbols = useCallback((channels: string[] = ['ticker', 'v2/ticker']) => {
+    if (!clientRef.current) {
+      console.warn('[useDeltaWebSocket] WebSocket client not initialized');
+      return;
+    }
+
+    console.log('[useDeltaWebSocket] 🌐 Subscribing to ALL symbols using "all" keyword');
+    clientRef.current.subscribeToAllSymbols(channels);
   }, []);
 
   // Unsubscribe from symbols
@@ -356,7 +375,7 @@ export function useDeltaWebSocket(config: UseDeltaWebSocketConfig = {}) {
     return {
       marketDataArray,
       orderBooksArray,
-      subscribedSymbols: [...new Set(allSubscriptions)],
+      subscribedSymbols: Array.from(new Set(allSubscriptions)),
       totalProducts: state.products.length,
       activeProducts: state.products.filter(p => p.state === 'live').length,
       connectedSymbols: marketDataArray.length,
@@ -397,6 +416,7 @@ export function useDeltaWebSocket(config: UseDeltaWebSocketConfig = {}) {
     unsubscribe,
     subscribeToAllProducts,
     subscribeToMajorPairs,
+    subscribeToAllSymbols,
 
     // Data Getters
     getMarketData,

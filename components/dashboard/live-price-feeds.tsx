@@ -60,7 +60,7 @@ function PriceCard({ symbol, data, product, theme, onClick, isSelected, isLoadin
       const timer = setTimeout(() => setPriceAnimation(null), 1000);
       return () => clearTimeout(timer);
     }
-  }, [data?.price, prevPrice]);
+  }, [data?.price]); // Remove prevPrice from dependencies to prevent infinite loop
 
   if (isLoading || !data) {
     return (

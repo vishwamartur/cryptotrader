@@ -1,3 +1,33 @@
+/**
+ * Portfolio Hook - Fetches and manages portfolio data from Delta Exchange
+ *
+ * @deprecated This hook is deprecated and will be removed in a future version.
+ * Please use `useWebSocketPortfolio` from '@/hooks/use-websocket-portfolio' instead.
+ *
+ * The WebSocket-based hook provides:
+ * - Real-time portfolio updates via WebSocket connection
+ * - No more 401 authentication errors
+ * - Better performance with sub-second updates
+ * - Improved error handling and connection management
+ * - Built-in health monitoring and retry logic
+ *
+ * Migration example:
+ * ```typescript
+ * // Old (deprecated)
+ * import { usePortfolio } from '@/hooks/use-portfolio'
+ * const { portfolioData, loading, error } = usePortfolio(credentials)
+ *
+ * // New (recommended)
+ * import { useWebSocketPortfolio } from '@/hooks/use-websocket-portfolio'
+ * const portfolio = useWebSocketPortfolio({
+ *   autoConnect: true,
+ *   environment: 'production',
+ *   apiKey: credentials?.api_key,
+ *   apiSecret: credentials?.api_secret
+ * })
+ * ```
+ */
+
 "use client"
 
 import { useState, useEffect } from "react"
