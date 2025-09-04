@@ -53,7 +53,7 @@ function PriceCard({ symbol, data, product, theme, onClick, isSelected, isLoadin
   const [prevPrice, setPrevPrice] = useState(data?.price || 0);
 
   useEffect(() => {
-    if (data?.price && data.price !== prevPrice) {
+    if (typeof data?.price === 'number' && data.price !== prevPrice) {
       setPriceAnimation(data.price > prevPrice ? 'up' : 'down');
       setPrevPrice(data.price);
 
@@ -90,13 +90,7 @@ function PriceCard({ symbol, data, product, theme, onClick, isSelected, isLoadin
     return price.toFixed(2);
   };
 
-  // Safe number formatting with fallbacks
-  const safeToFixed = (value: number | undefined, decimals: number = 2): string => {
-    if (value === undefined || value === null || isNaN(value)) {
-      return '0.00';
-    }
-    return value.toFixed(decimals);
-  };
+  // Use module-level safeToFixed
 
   return (
     <Card 
@@ -178,12 +172,12 @@ function PriceCard({ symbol, data, product, theme, onClick, isSelected, isLoadin
               <span>Volume</span>
             </div>
             <span className="font-medium">
-              {(data.volume / 1000000).toFixed(2)}M
+              {(((data?.volume ?? 0) / 1_000_000)).toFixed(2)}M
             </span>
           </div>
 
           {/* Bid/Ask Spread */}
-          {data.bid && data.ask && (
+          {data.bid != null && data.ask != null && (
             <div className="flex items-center justify-between text-xs">
               <div className="text-green-600">
                 Bid: ${formatPrice(data.bid)}

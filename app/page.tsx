@@ -2,13 +2,13 @@
 
 import { Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { EnhancedUnifiedDashboard } from "@/components/enhanced-unified-dashboard"
+import { UnifiedDashboard } from "@/components/unified-dashboard"
 
 function DashboardWithParams() {
   const searchParams = useSearchParams()
   const view = searchParams.get('view') as 'overview' | 'trading' | 'analytics' | 'monitoring' | null
 
-  return <EnhancedUnifiedDashboard initialView={view} />
+  return <UnifiedDashboard initialView={view || undefined} />
 }
 
 export default function HomePage() {

@@ -319,7 +319,8 @@ describe('UnifiedDashboard', () => {
       });
       
       render(<UnifiedDashboard />);
-      
+      fireEvent.click(screen.getByText('Trading'));
+
       const aiTradingPanel = screen.getByTestId('ai-trading-panel').closest('[data-component="ai-trading-panel"]');
       const riskDashboard = screen.getByTestId('risk-dashboard').closest('[data-component="risk-dashboard"]');
       const tradingInterface = screen.getByTestId('trading-interface').closest('[data-component="trading-interface"]');
