@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react"
 import { generateHmacSha256 } from "../lib/crypto-utils"
+import { validateWebSocketURL, createWebSocketErrorMessage } from "../lib/websocket-validator"
 
 interface WebSocketConfig {
   url: string
@@ -42,20 +43,36 @@ export function useWebSocket(config: WebSocketConfig) {
         return
       }
 
-      if (!url || (!url.startsWith("ws://") && !url.startsWith("wss://"))) {
-        setError("Invalid WebSocket URL provided")
-        return
+      // Validate WebSocket URL
+      const validation = validateWebSocketURL(url);
+      if (!validation.isValid) {
+        const errorMsg = createWebSocketErrorMessage(url, validation.error || 'Invalid URL');
+        console.error("[v0] WebSocket URL validation failed:", validation);
+        setError(errorMsg);
+        return;
       }
 
-      console.log("[v0] Attempting to connect to WebSocket:", url)
-      const ws = new WebSocket(url)
-      wsRef.current = ws
+      console.log("[v0] Attempting to connect to WebSocket:", url);
+      console.log("[v0] Connection attempt #", reconnectAttempts + 1);
+
+      const ws = new WebSocket(url);
+      wsRef.current = ws;
+
+      // Set connection timeout
+      const connectionTimeout = setTimeout(() => {
+        if (ws.readyState === WebSocket.CONNECTING) {
+          console.error("[v0] WebSocket connection timeout");
+          ws.close();
+          setError("Connection timeout - WebSocket server did not respond");
+        }
+      }, 10000); // 10 second timeout
 
       ws.onopen = () => {
-        console.log("[v0] WebSocket connected successfully")
-        setIsConnected(true)
-        setError(null)
-        setReconnectAttempts(0)
+        clearTimeout(connectionTimeout);
+        console.log("[v0] WebSocket connected successfully to:", url);
+        setIsConnected(true);
+        setError(null);
+        setReconnectAttempts(0);
       }
 
       ws.onmessage = (event) => {
@@ -74,15 +91,18 @@ export function useWebSocket(config: WebSocketConfig) {
       }
 
       ws.onclose = (event) => {
+        clearTimeout(connectionTimeout);
         console.log(
           "[v0] WebSocket disconnected - Code:",
           event.code,
           "Reason:",
-          event.reason,
+          event.reason || 'No reason provided',
           "Clean:",
           event.wasClean,
-        )
-        setIsConnected(false)
+          "URL:",
+          url
+        );
+        setIsConnected(false);
 
         let errorMessage = "Connection closed"
         switch (event.code) {
@@ -123,39 +143,60 @@ export function useWebSocket(config: WebSocketConfig) {
       }
 
       ws.onerror = (errorEvent) => {
-        console.error("[v0] WebSocket error event:", errorEvent)
+        // Extract meaningful error information
+        const errorDetails = {
+          type: errorEvent.type,
+          timeStamp: errorEvent.timeStamp,
+          target: errorEvent.target ? {
+            readyState: (errorEvent.target as WebSocket).readyState,
+            url: (errorEvent.target as WebSocket).url,
+            protocol: (errorEvent.target as WebSocket).protocol
+          } : null,
+          message: errorEvent instanceof ErrorEvent ? errorEvent.message : 'Unknown error'
+        };
 
-        let errorMessage = "WebSocket connection error"
+        console.error("[v0] WebSocket error event details:", errorDetails);
 
-        if (errorEvent instanceof ErrorEvent) {
-          errorMessage = `WebSocket error: ${errorEvent.message}`
+        let errorMessage = "WebSocket connection error";
+
+        if (errorEvent instanceof ErrorEvent && errorEvent.message) {
+          errorMessage = `WebSocket error: ${errorEvent.message}`;
         } else if (errorEvent.target instanceof WebSocket) {
-          const ws = errorEvent.target
+          const ws = errorEvent.target;
+          const readyStateNames = {
+            [WebSocket.CONNECTING]: 'CONNECTING',
+            [WebSocket.OPEN]: 'OPEN',
+            [WebSocket.CLOSING]: 'CLOSING',
+            [WebSocket.CLOSED]: 'CLOSED'
+          };
+
           switch (ws.readyState) {
             case WebSocket.CONNECTING:
-              errorMessage = "Failed to connect to WebSocket server"
-              break
+              errorMessage = `Failed to connect to WebSocket server (${ws.url})`;
+              break;
             case WebSocket.CLOSING:
-              errorMessage = "WebSocket connection is closing"
-              break
+              errorMessage = "WebSocket connection is closing";
+              break;
             case WebSocket.CLOSED:
-              errorMessage = "WebSocket connection failed"
-              break
+              errorMessage = "WebSocket connection failed";
+              break;
             default:
-              errorMessage = "Unknown WebSocket error"
+              errorMessage = `WebSocket error in state: ${readyStateNames[ws.readyState] || ws.readyState}`;
           }
         }
 
-        if (url.includes("delta.exchange") || url.includes("deltaex.org")) {
-          errorMessage += " - Please check if Delta Exchange WebSocket service is available"
-        }
+        // Create enhanced error message with troubleshooting steps
+        const enhancedErrorMessage = createWebSocketErrorMessage(url, errorMessage);
 
-        console.error("[v0] WebSocket error details:", errorMessage)
-        setError(errorMessage)
+        console.error("[v0] WebSocket error details:", enhancedErrorMessage);
+        setError(enhancedErrorMessage);
       }
     } catch (err) {
-      console.error("[v0] Error creating WebSocket connection:", err)
-      setError(`Failed to create WebSocket connection: ${err instanceof Error ? err.message : "Unknown error"}`)
+      console.error("[v0] Error creating WebSocket connection:", err);
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      const fullError = `Failed to create WebSocket connection to ${url}: ${errorMessage}`;
+      console.error("[v0]", fullError);
+      setError(fullError);
     }
   }, [url, reconnectInterval, maxReconnectAttempts, reconnectAttempts])
 
