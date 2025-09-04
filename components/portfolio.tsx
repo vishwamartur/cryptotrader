@@ -4,15 +4,33 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Wallet, TrendingUp, TrendingDown, RefreshCw, AlertCircle, Settings } from "lucide-react"
-import { usePortfolio } from "@/hooks/use-portfolio"
+import { Wallet, TrendingUp, TrendingDown, RefreshCw, AlertCircle, Settings, Wifi, WifiOff } from "lucide-react"
+import { useWebSocketPortfolio } from "@/hooks/use-websocket-portfolio"
 import { useState } from "react"
 import { ApiCredentialsDialog } from "@/components/api-credentials-dialog"
 
 export function Portfolio() {
   const [apiCredentials, setApiCredentials] = useState<{ api_key: string; api_secret: string } | null>(null)
   const [showCredentialsDialog, setShowCredentialsDialog] = useState(false)
-  const { portfolioData, loading, error } = usePortfolio(apiCredentials)
+
+  // Use WebSocket-based portfolio data instead of REST API
+  const portfolio = useWebSocketPortfolio({
+    autoConnect: true,
+    environment: 'production',
+    apiKey: apiCredentials?.api_key,
+    apiSecret: apiCredentials?.api_secret,
+    enableMockFallback: true
+  })
+
+  // Backward compatibility mapping
+  const portfolioData = {
+    balances: portfolio.balances,
+    positions: portfolio.positions,
+    orders: portfolio.orders,
+    summary: portfolio.summary
+  }
+  const loading = portfolio.isConnecting
+  const error = portfolio.error
 
   if (!apiCredentials) {
     return (
@@ -53,7 +71,20 @@ export function Portfolio() {
           <CardTitle className="flex items-center gap-2">
             <Wallet className="h-5 w-5" />
             Portfolio
-            <RefreshCw className="h-4 w-4 animate-spin ml-auto" />
+            <div className="flex items-center gap-2 ml-auto">
+              {portfolio.isConnecting && <RefreshCw className="h-4 w-4 animate-spin" />}
+              {portfolio.isConnected ? (
+                <div className="flex items-center gap-1 text-green-600">
+                  <Wifi className="h-4 w-4" />
+                  <span className="text-xs">WebSocket</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1 text-red-600">
+                  <WifiOff className="h-4 w-4" />
+                  <span className="text-xs">Disconnected</span>
+                </div>
+              )}
+            </div>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -117,6 +148,21 @@ export function Portfolio() {
             <div className="flex items-center gap-2">
               <Wallet className="h-5 w-5" />
               Portfolio
+              {/* WebSocket Connection Status */}
+              {portfolio.isConnected ? (
+                <Badge variant="outline" className="text-green-600 border-green-600">
+                  <Wifi className="h-3 w-3 mr-1" />
+                  Live WebSocket
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="text-red-600 border-red-600">
+                  <WifiOff className="h-3 w-3 mr-1" />
+                  Disconnected
+                </Badge>
+              )}
+              {portfolio.isUsingMockData && (
+                <Badge variant="secondary">Mock Data</Badge>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <Badge variant="secondary" className="text-xs">

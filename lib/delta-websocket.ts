@@ -511,6 +511,43 @@ export class DeltaWebSocketClient {
   }
 
   /**
+   * Subscribe to private channels (requires authentication)
+   */
+  subscribeToPrivateChannels(channels: string[] = ['positions', 'orders', 'wallet']): void {
+    if (!this.isAuthenticated) {
+      console.warn('[DeltaWebSocket] Cannot subscribe to private channels - not authenticated');
+      return;
+    }
+
+    console.log('[DeltaWebSocket] 🔐 Subscribing to private channels:', channels);
+
+    // Private channels don't use symbols, they use empty array or no symbols
+    channels.forEach(channel => {
+      if (!this.subscriptions.has(channel)) {
+        this.subscriptions.set(channel, new Set());
+      }
+      this.subscriptions.get(channel)!.add('private');
+    });
+
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.warn('[DeltaWebSocket] Not connected, private subscriptions stored for later');
+      return;
+    }
+
+    // Send private channel subscription requests
+    channels.forEach(channel => {
+      this.send({
+        type: 'subscribe',
+        payload: {
+          channels: [{ name: channel, symbols: [] }] // Private channels use empty symbols array
+        }
+      });
+    });
+
+    console.log('[DeltaWebSocket] ✅ Sent private channel subscriptions');
+  }
+
+  /**
    * Add message handler
    */
   onMessage(handler: (message: DeltaWebSocketMessage) => void): () => void {

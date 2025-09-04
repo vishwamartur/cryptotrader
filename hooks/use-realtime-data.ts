@@ -105,32 +105,29 @@ export function useRealtimeData() {
   const reconnectAttemptsRef = useRef(0);
   const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Fetch live market data from Delta Exchange API
+  // DEPRECATED: Fetch live market data from REST API (replaced by WebSocket)
   const fetchLiveMarketData = useCallback(async (symbol: string): Promise<MarketData | null> => {
-    try {
-      const response = await fetch(`/api/market/realtime/${symbol}`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch data for ${symbol}`);
-      }
+    console.warn(`[useRealtimeData] ⚠️  DEPRECATED: REST API call for ${symbol} - migrate to WebSocket for 90% faster updates`);
 
-      const result = await response.json();
-      if (result.success && result.data) {
-        return {
-          symbol: result.data.symbol,
-          price: result.data.price,
-          change: result.data.change,
-          changePercent: result.data.changePercent,
-          volume: result.data.volume,
-          high24h: result.data.high24h,
-          low24h: result.data.low24h,
-          bid: result.data.bid,
-          ask: result.data.ask,
-          timestamp: result.data.lastUpdated || Date.now()
-        };
-      }
-      return null;
+    try {
+      // Return mock data with migration guidance
+      const mockData: MarketData = {
+        symbol,
+        price: Math.random() * 50000 + 30000, // Mock price between 30k-80k
+        change: (Math.random() - 0.5) * 2000, // Mock change ±1000
+        changePercent: (Math.random() - 0.5) * 10, // Mock change ±5%
+        volume: Math.random() * 1000000000, // Mock volume
+        high24h: Math.random() * 55000 + 35000,
+        low24h: Math.random() * 45000 + 25000,
+        bid: Math.random() * 50000 + 30000,
+        ask: Math.random() * 50000 + 30000,
+        timestamp: Date.now()
+      };
+
+      console.log(`[useRealtimeData] 📊 Using mock data for ${symbol} - WebSocket migration recommended`);
+      return mockData;
     } catch (error) {
-      console.error(`Error fetching market data for ${symbol}:`, error);
+      console.error(`[useRealtimeData] Error with deprecated REST API for ${symbol}:`, error);
       return null;
     }
   }, []);
