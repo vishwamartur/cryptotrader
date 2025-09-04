@@ -80,13 +80,17 @@ interface EnhancedTradingData {
   performanceProjection: any
 }
 
-export function EnhancedUnifiedDashboard() {
+interface EnhancedUnifiedDashboardProps {
+  initialView?: 'overview' | 'trading' | 'analytics' | 'monitoring' | null
+}
+
+export function EnhancedUnifiedDashboard({ initialView }: EnhancedUnifiedDashboardProps = {}) {
   const [layout, setLayout] = useState<DashboardLayout>({
     theme: 'dark',
     autoRefresh: true,
     refreshInterval: 5000,
     notifications: true,
-    view: 'unified',
+    view: initialView || 'unified',
     compactMode: false
   })
 

@@ -201,50 +201,6 @@ export interface HealthCheck {
 }
 
 
-
-<<<<<<<
-
-
-=======
-  // Cleanup method to prevent memory leaks
-
-  cleanup(): void {
-
-    if (this.healthCheckInterval) {
-
-      clearInterval(this.healthCheckInterval);
-
-      this.healthCheckInterval = null;
-
-    }
-
-  }
-
-
-
-  // Private methods
-
-  private startHealthChecks(): void {
-
-    this.healthCheckInterval = setInterval(async () => {
-
-      const healthCheckPromises = Array.from(this.healthChecks.keys()).map(name =>
-
-        this.runHealthCheck(name)
-
-      );
-
-
-
-      await Promise.allSettled(healthCheckPromises);
-
-    }, this.config.healthCheckInterval);
-
-  }
-
->>>>>>>
-
-
 export interface MonitoringConfig {
 
 

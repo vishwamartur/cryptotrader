@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createDeltaExchangeAPIFromEnv } from '@/lib/delta-exchange';
+import { getGlobalRealtimeManager } from '@/lib/delta-realtime-manager';
 
 // Symbol mapping from common formats to Delta Exchange symbols
 const SYMBOL_MAPPING: Record<string, string> = {
@@ -82,26 +83,36 @@ export async function GET(
     const includeOrderbook = searchParams.get('includeOrderbook') === 'true';
     const includeTechnicals = searchParams.get('includeTechnicals') === 'true';
 
-    // Create Delta Exchange API instance
-    const deltaAPI = createDeltaExchangeAPIFromEnv();
-
-    // Get live ticker data from Delta Exchange with fallback
-    let tickerData;
+    // Try to get data from WebSocket first, then fallback to REST API
     let ticker;
     let isUsingFallback = false;
+    let isUsingWebSocket = false;
 
     try {
-      tickerData = await deltaAPI.getTicker(deltaSymbol);
+      // Check if we have real-time data from WebSocket
+      const realtimeManager = getGlobalRealtimeManager();
+      const wsTickerData = realtimeManager.getTicker(deltaSymbol);
 
-      if (!tickerData.success || !tickerData.result) {
-        throw new Error(`Failed to fetch ticker data for ${deltaSymbol}`);
+      if (wsTickerData && realtimeManager.isConnected()) {
+        console.log(`Using WebSocket data for ${deltaSymbol}`);
+        ticker = wsTickerData;
+        isUsingWebSocket = true;
+      } else {
+        // Fallback to REST API
+        console.log(`Using REST API for ${deltaSymbol}`);
+        const deltaAPI = createDeltaExchangeAPIFromEnv();
+        const tickerData = await deltaAPI.getTicker(deltaSymbol);
+
+        if (!tickerData.success || !tickerData.result) {
+          throw new Error(`Failed to fetch ticker data for ${deltaSymbol}`);
+        }
+
+        ticker = tickerData.result;
       }
-
-      ticker = tickerData.result;
     } catch (tickerError) {
-      console.warn(`Delta Exchange API failed for ${deltaSymbol}, using fallback data:`, tickerError);
+      console.warn(`Both WebSocket and REST API failed for ${deltaSymbol}, using fallback data:`, tickerError);
 
-      // Use fallback mock data when Delta Exchange API is not available
+      // Use fallback mock data when both WebSocket and REST API are not available
       ticker = generateFallbackTickerData(toCanonicalUsdSymbol(inputSymbol));
       isUsingFallback = true;
     }
@@ -119,19 +130,44 @@ export async function GET(
       changePercent: parseFloat(ticker.change_percent || '0'),
       lastUpdated: Date.now(),
       deltaSymbol: deltaSymbol,
-      source: isUsingFallback ? 'fallback_data' : 'delta_exchange',
-      isLiveData: !isUsingFallback
+      source: isUsingFallback ? 'fallback_data' : (isUsingWebSocket ? 'websocket' : 'rest_api'),
+      isLiveData: !isUsingFallback,
+      isRealtime: isUsingWebSocket
     };
 
     // Add order book data if requested
     if (includeOrderbook) {
       try {
-        const orderbookData = await deltaAPI.getOrderbook(deltaSymbol);
+        let orderbookData;
+
+        // Try WebSocket data first
+        if (isUsingWebSocket) {
+          const realtimeManager = getGlobalRealtimeManager();
+          const wsOrderbook = realtimeManager.getOrderbook(deltaSymbol);
+
+          if (wsOrderbook) {
+            orderbookData = {
+              success: true,
+              result: {
+                buy: wsOrderbook.buy || wsOrderbook.bids || [],
+                sell: wsOrderbook.sell || wsOrderbook.asks || []
+              }
+            };
+          }
+        }
+
+        // Fallback to REST API if WebSocket data not available
+        if (!orderbookData) {
+          const deltaAPI = createDeltaExchangeAPIFromEnv();
+          orderbookData = await deltaAPI.getOrderbook(deltaSymbol);
+        }
+
         if (orderbookData.success && orderbookData.result) {
           (marketData as any).orderbook = {
             bids: orderbookData.result.buy || [],
             asks: orderbookData.result.sell || [],
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            source: isUsingWebSocket ? 'websocket' : 'rest_api'
           };
         }
       } catch (orderbookError) {

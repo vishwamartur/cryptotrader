@@ -151,50 +151,17 @@ export function tTest(arr1: number[], arr2: number[]): { t: number; p: number; s
 
 
   return { t, p, significant: p < 0.05 };
-
-
-
-<<<<<<<
 }
 
-
-
-
-
-
-
 // Simplified t-distribution CDF approximation
-
-
-
 function tCDF(t: number, df: number): number {
-
-
-
   // Using normal approximation for large df
-
-
-
   if (df > 30) {
-
-
-
     return normalCDF(t);
-
-
-
   }
 
-
-
   // Simplified approximation for small df
-
-
-
   const x = t / Math.sqrt(df);
-
-
-
   return 0.5 + 0.5 * Math.sign(t) * Math.sqrt(1 - Math.exp(-2 * x * x / Math.PI));
 
 
@@ -832,22 +799,6 @@ export function calmarRatio(returns: number[], prices: number[]): number {
 
 
   return annualizedReturn / maxDD;
-
-
-
-}
-
-
-
-=======
-export function calmarRatio(returns: number[], prices: number[]): number {
-
-  const annualizedReturn = mean(returns) * 252; // Assuming daily returns
-
-  const maxDD = maxDrawdown(prices);
-
-  return annualizedReturn / maxDD;
-
 }
 
 
@@ -983,5 +934,3 @@ export function atr(highs: number[], lows: number[], closes: number[], period: n
   return sma(trueRanges, period);
 
 }
-
->>>>>>>

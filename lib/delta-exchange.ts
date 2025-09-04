@@ -181,7 +181,7 @@ export function createDeltaExchangeAPI(apiKey: string, apiSecret: string) {
   return new DeltaExchangeAPI({ apiKey, apiSecret })
 }
 
-// Utility function to create API instance with environment credentials
+// Utility function to create API instance from environment variables
 export function createDeltaExchangeAPIFromEnv() {
   const credentials = getDeltaCredentials()
   return new DeltaExchangeAPI(credentials)

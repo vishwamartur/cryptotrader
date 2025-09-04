@@ -5,6 +5,7 @@ import { QuantStrategyEngine, StrategyEnsemble } from "./quant-strategy-engine"
 import { RLTradingSystem } from "./quant-rl"
 import { HFTEngine } from "./hft-orderbook-engine"
 import { YieldOptimizer } from "./quant-defi"
+import { getGlobalRealtimeManager } from "./delta-realtime-manager"
 import type { MarketData, Position } from "./types"
 
 export interface AgentConfig {
@@ -701,33 +702,65 @@ export class AutonomousAgent {
     balance: number
   }> {
     try {
-      // Fetch live data from Delta Exchange APIs
       const symbols = ['BTC-USD', 'ETH-USD', 'ADA-USD'];
+      const realtimeManager = getGlobalRealtimeManager();
+
+      // Ensure WebSocket connection is established
+      if (!realtimeManager.isConnected()) {
+        console.log('[AutonomousAgent] Connecting to WebSocket for real-time data...');
+        try {
+          await realtimeManager.connect();
+          // Subscribe to required data streams
+          realtimeManager.subscribeToTickers(symbols);
+        } catch (wsError) {
+          console.warn('[AutonomousAgent] WebSocket connection failed, using REST API fallback:', wsError);
+        }
+      }
+
       const [marketDataResults, portfolioBalance, portfolioPositions] = await Promise.all([
         Promise.all(symbols.map(async (symbol) => {
           try {
-            const response = await fetch(`/api/market/realtime/${symbol}`);
-            const result = await response.json();
-            if (result.success && result.data) {
+            // Try WebSocket data first
+            const wsTickerData = realtimeManager.getTicker(symbol);
+
+            if (wsTickerData && realtimeManager.isConnected()) {
+              console.log(`[AutonomousAgent] Using WebSocket data for ${symbol}`);
               return {
-                symbol: result.data.symbol,
-                price: result.data.price,
-                change: result.data.change,
-                changePercent: result.data.changePercent,
-                volume: result.data.volume,
-                high24h: result.data.high24h,
-                low24h: result.data.low24h,
-                lastUpdated: result.data.lastUpdated || Date.now()
+                symbol: wsTickerData.symbol,
+                price: parseFloat(wsTickerData.price || wsTickerData.close || '0'),
+                change: parseFloat(wsTickerData.change || '0'),
+                changePercent: parseFloat(wsTickerData.changePercent || wsTickerData.change_percent || '0'),
+                volume: parseFloat(wsTickerData.volume || '0'),
+                high24h: parseFloat(wsTickerData.high || '0'),
+                low24h: parseFloat(wsTickerData.low || '0'),
+                lastUpdated: wsTickerData.timestamp || Date.now()
               };
+            } else {
+              // Fallback to REST API
+              console.log(`[AutonomousAgent] Using REST API fallback for ${symbol}`);
+              const response = await fetch(`/api/market/realtime/${symbol}`);
+              const result = await response.json();
+              if (result.success && result.data) {
+                return {
+                  symbol: result.data.symbol,
+                  price: result.data.price,
+                  change: result.data.change,
+                  changePercent: result.data.changePercent,
+                  volume: result.data.volume,
+                  high24h: result.data.high24h,
+                  low24h: result.data.low24h,
+                  lastUpdated: result.data.lastUpdated || Date.now()
+                };
+              }
             }
             return null;
           } catch (error) {
-            console.error(`Error fetching market data for ${symbol}:`, error);
+            console.error(`[AutonomousAgent] Error fetching market data for ${symbol}:`, error);
             return null;
           }
         })),
-        fetch('/api/portfolio/balance').then(r => r.json()).catch(() => ({ success: false })),
-        fetch('/api/portfolio/positions').then(r => r.json()).catch(() => ({ success: false }))
+        this.fetchPortfolioDataFromWebSocket(),
+        this.fetchPositionsDataFromWebSocket()
       ]);
 
       // Filter out null market data
@@ -758,6 +791,56 @@ export class AutonomousAgent {
         positions: [],
         balance: 10000
       };
+    }
+  }
+
+  private async fetchPortfolioDataFromWebSocket(): Promise<any> {
+    try {
+      const realtimeManager = getGlobalRealtimeManager();
+
+      if (realtimeManager.isAuthenticated()) {
+        const balances = realtimeManager.getAllBalances();
+        if (balances.length > 0) {
+          const totalBalance = balances.reduce((sum, balance) =>
+            sum + parseFloat(balance.walletBalance || '0'), 0
+          );
+          return { success: true, summary: { totalBalance: totalBalance.toString() } };
+        }
+      }
+
+      // Fallback to REST API
+      return await fetch('/api/portfolio/balance').then(r => r.json()).catch(() => ({ success: false }));
+    } catch (error) {
+      console.warn('[AutonomousAgent] Error fetching portfolio data from WebSocket:', error);
+      return { success: false };
+    }
+  }
+
+  private async fetchPositionsDataFromWebSocket(): Promise<any> {
+    try {
+      const realtimeManager = getGlobalRealtimeManager();
+
+      if (realtimeManager.isAuthenticated()) {
+        const positions = realtimeManager.getAllPositions();
+        if (positions.length > 0) {
+          return {
+            success: true,
+            positions: positions.map(pos => ({
+              product: { symbol: pos.symbol },
+              size: pos.size,
+              entry_price: pos.entryPrice,
+              mark_price: pos.currentPrice || pos.entryPrice,
+              unrealized_pnl: pos.unrealizedPnl || '0'
+            }))
+          };
+        }
+      }
+
+      // Fallback to REST API
+      return await fetch('/api/portfolio/positions').then(r => r.json()).catch(() => ({ success: false }));
+    } catch (error) {
+      console.warn('[AutonomousAgent] Error fetching positions data from WebSocket:', error);
+      return { success: false };
     }
   }
 
