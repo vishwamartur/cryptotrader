@@ -3,6 +3,31 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getClientMarketData, RealtimeMarketData, ProductInfo } from '@/lib/client-market-data';
 
+/**
+ * @deprecated This hook is deprecated and will be removed in a future version.
+ * Please use `useWebSocketMarketData` from '@/hooks/use-websocket-market-data' instead.
+ *
+ * The WebSocket-based hook provides:
+ * - Real-time data updates via WebSocket connection
+ * - Better performance with reduced API calls
+ * - Improved error handling and connection management
+ * - Consistent data structure and type safety
+ *
+ * Migration example:
+ * ```typescript
+ * // Old (deprecated)
+ * import { useDynamicMarketData } from '@/hooks/use-dynamic-market-data'
+ * const marketData = useDynamicMarketData()
+ *
+ * // New (recommended)
+ * import { useWebSocketMarketData } from '@/hooks/use-websocket-market-data'
+ * const marketData = useWebSocketMarketData({
+ *   autoConnect: true,
+ *   subscribeToMajorPairs: true
+ * })
+ * ```
+ */
+
 export interface MarketDataError {
   type: string;
   message: string;
@@ -36,6 +61,15 @@ export interface MarketDataHookReturn extends MarketDataState {
 }
 
 export function useDynamicMarketData(): MarketDataHookReturn {
+  // Show deprecation warning in development
+  if (process.env.NODE_ENV === 'development') {
+    console.warn(
+      '⚠️ DEPRECATED: useDynamicMarketData is deprecated and will be removed in a future version.\n' +
+      '   Please migrate to useWebSocketMarketData for real-time data streaming.\n' +
+      '   See: /hooks/use-websocket-market-data.ts'
+    );
+  }
+
   const [state, setState] = useState<MarketDataState>({
     products: [],
     marketData: new Map(),

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
@@ -12,7 +12,7 @@ import { Separator } from "@/components/ui/separator"
 import { Shield, AlertTriangle, TrendingDown, TrendingUp, Target, Settings, AlertCircle } from "lucide-react"
 import { RiskManager, type RiskLimits, type RiskMetrics, type RiskAlert } from "@/lib/risk-management"
 import { usePortfolio } from "@/hooks/use-portfolio"
-import { useMarketData } from "@/hooks/use-market-data"
+import { useWebSocketMarketData } from "@/hooks/use-websocket-market-data"
 
 export function RiskDashboard() {
   const [riskManager, setRiskManager] = useState<RiskManager | null>(null)
@@ -30,36 +30,94 @@ export function RiskDashboard() {
   })
 
   const { portfolioData } = usePortfolio(null)
-  const positions = portfolioData?.positions || []
-  const balance = portfolioData?.balance || { total: 0, available: 0, reserved: 0 }
-  const { marketData } = useMarketData()
+
+  // Use WebSocket-based market data with "all" symbol subscription for comprehensive risk analysis
+  const marketDataWS = useWebSocketMarketData({
+    autoConnect: true,
+    subscribeToAllSymbols: true, // ✅ Use "all" symbol subscription for comprehensive risk monitoring
+    subscribeToMajorPairs: false, // Disable individual subscriptions since we're using "all"
+    subscribeToAllProducts: false,
+    channels: ['v2/ticker', 'l1_orderbook'], // Enhanced channels for better risk analysis
+    maxSymbols: 1000, // Allow all symbols for comprehensive risk assessment
+    environment: 'production'
+  })
+
+  // Memoize positions and balance to prevent unnecessary re-renders
+  const positions = useMemo(() => {
+    return portfolioData?.positions || []
+  }, [portfolioData?.positions])
+
+  const balance = useMemo(() => {
+    return portfolioData?.balances || { total: 0, available: 0, reserved: 0 }
+  }, [portfolioData?.balances])
+
+  // Memoize market data to prevent unnecessary re-renders
+  const stableMarketData = useMemo(() => {
+    return marketDataWS.marketDataArray || []
+  }, [marketDataWS.marketDataArray])
 
   useEffect(() => {
     const manager = new RiskManager(limits)
     setRiskManager(manager)
   }, [limits])
 
-  useEffect(() => {
-    if (riskManager && positions && balance && marketData) {
-      // Mock historical P&L data - in real app, this would come from trade history
-      const mockHistoricalPnL = Array.from({ length: 30 }, () => (Math.random() - 0.5) * 200)
+  // Memoize the historical P&L data to prevent regeneration on every render
+  const mockHistoricalPnL = useMemo(() => {
+    return Array.from({ length: 30 }, () => (Math.random() - 0.5) * 200)
+  }, []) // Empty dependency array - only generate once
 
-      const metrics = riskManager.calculateRiskMetrics(positions, balance, marketData, mockHistoricalPnL)
-      setRiskMetrics(metrics)
+  // Use useCallback to memoize the risk calculation function
+  const calculateRiskMetrics = useCallback(() => {
+    if (!riskManager) {
+      console.log('[RiskDashboard] Risk manager not initialized yet')
+      return
+    }
+
+    try {
+      console.log('[RiskDashboard] Calculating risk metrics', {
+        positionsCount: positions.length,
+        hasBalance: !!balance,
+        marketDataCount: stableMarketData.length
+      })
+
+      const metrics = riskManager.calculateRiskMetrics(positions, balance, stableMarketData, mockHistoricalPnL)
+      setRiskMetrics(prevMetrics => {
+        // Only update if metrics have actually changed to prevent unnecessary re-renders
+        if (JSON.stringify(prevMetrics) !== JSON.stringify(metrics)) {
+          console.log('[RiskDashboard] Risk metrics updated')
+          return metrics
+        }
+        return prevMetrics
+      })
 
       const newAlerts = riskManager.checkRiskLimits(metrics, positions, balance)
       if (newAlerts.length > 0) {
+        console.log('[RiskDashboard] New risk alerts generated:', newAlerts.length)
         setAlerts((prev) => [...prev, ...newAlerts].slice(-10))
       }
+    } catch (error) {
+      console.error('[RiskDashboard] Error calculating risk metrics:', error)
     }
-  }, [riskManager, positions, balance, marketData])
+  }, [riskManager, positions, balance, stableMarketData, mockHistoricalPnL])
 
-  const updateLimits = () => {
+  useEffect(() => {
+    // Add a small delay to prevent rapid successive calculations
+    const timeoutId = setTimeout(() => {
+      calculateRiskMetrics()
+    }, 100)
+
+    return () => clearTimeout(timeoutId)
+  }, [calculateRiskMetrics])
+
+  const updateLimits = useCallback(() => {
     if (riskManager) {
+      console.log('[RiskDashboard] Updating risk limits:', limits)
       riskManager.updateLimits(limits)
       setShowSettings(false)
+      // Recalculate metrics after updating limits
+      setTimeout(() => calculateRiskMetrics(), 50)
     }
-  }
+  }, [riskManager, limits, calculateRiskMetrics])
 
   const getRiskColor = (value: number, threshold: number) => {
     const percentage = (value / threshold) * 100

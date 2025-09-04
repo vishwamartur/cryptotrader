@@ -3,6 +3,31 @@
 import { useState, useEffect, useCallback } from "react"
 import { useErrorHandler } from "@/components/error-boundary"
 
+/**
+ * @deprecated This hook is deprecated and will be removed in a future version.
+ * Please use `useWebSocketMarketData` from '@/hooks/use-websocket-market-data' instead.
+ *
+ * The WebSocket-based hook provides:
+ * - Real-time data updates via WebSocket connection
+ * - Better performance with reduced API calls
+ * - Improved error handling and connection management
+ * - Built-in health monitoring and retry logic
+ *
+ * Migration example:
+ * ```typescript
+ * // Old (deprecated)
+ * import { useSafeMarketData } from '@/hooks/use-safe-market-data'
+ * const { data, loading, error, refetch } = useSafeMarketData()
+ *
+ * // New (recommended)
+ * import { useWebSocketMarketData } from '@/hooks/use-websocket-market-data'
+ * const marketData = useWebSocketMarketData({
+ *   autoConnect: true,
+ *   subscribeToMajorPairs: true
+ * })
+ * ```
+ */
+
 interface Product {
   id: number
   symbol: string
@@ -60,6 +85,15 @@ interface MarketDataHookReturn extends MarketDataState {
  * Integrates with our API health monitoring and provides robust error recovery
  */
 export function useSafeMarketData(): MarketDataHookReturn {
+  // Show deprecation warning in development
+  if (process.env.NODE_ENV === 'development') {
+    console.warn(
+      '⚠️ DEPRECATED: useSafeMarketData is deprecated and will be removed in a future version.\n' +
+      '   Please migrate to useWebSocketMarketData for real-time data streaming.\n' +
+      '   See: /hooks/use-websocket-market-data.ts'
+    );
+  }
+
   const [state, setState] = useState<MarketDataState>({
     data: [],
     loading: true,

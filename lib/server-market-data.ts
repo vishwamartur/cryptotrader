@@ -51,6 +51,72 @@ export function getServerMarketDataManager() {
 }
 
 /**
+ * Get ticker data for a specific symbol from server-side WebSocket or REST API
+ */
+export async function getServerTicker(symbol: string) {
+  try {
+    const manager = getServerMarketDataManager();
+
+    // Try WebSocket data first if available
+    if (manager.wsAPI) {
+      const wsTickerData = manager.wsAPI.getTicker(symbol);
+      if (wsTickerData) {
+        console.log(`[ServerMarketData] Using WebSocket ticker data for ${symbol}`);
+        return wsTickerData;
+      }
+    }
+
+    // Fallback to REST API
+    console.log(`[ServerMarketData] Using REST API ticker data for ${symbol}`);
+    const restClient = manager.restClient;
+    const tickerResult = await restClient.getTicker(symbol);
+
+    if (tickerResult.success && tickerResult.result) {
+      return tickerResult.result;
+    }
+
+    throw new Error(`Failed to fetch ticker data for ${symbol}`);
+  } catch (error) {
+    console.error(`[ServerMarketData] Failed to get ticker for ${symbol}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Get orderbook data for a specific symbol from server-side WebSocket or REST API
+ */
+export async function getServerOrderbook(symbol: string) {
+  try {
+    const manager = getServerMarketDataManager();
+
+    // Try WebSocket data first if available
+    if (manager.wsAPI) {
+      const wsOrderbookData = manager.wsAPI.getOrderbook(symbol);
+      if (wsOrderbookData) {
+        console.log(`[ServerMarketData] Using WebSocket orderbook data for ${symbol}`);
+        return {
+          success: true,
+          result: {
+            buy: wsOrderbookData.buy || wsOrderbookData.bids || [],
+            sell: wsOrderbookData.sell || wsOrderbookData.asks || []
+          }
+        };
+      }
+    }
+
+    // Fallback to REST API
+    console.log(`[ServerMarketData] Using REST API orderbook data for ${symbol}`);
+    const restClient = manager.restClient;
+    const orderbookResult = await restClient.getOrderbook(symbol);
+
+    return orderbookResult;
+  } catch (error) {
+    console.error(`[ServerMarketData] Failed to get orderbook for ${symbol}:`, error);
+    throw error;
+  }
+}
+
+/**
  * Get market data for client-side consumption
  * Returns serializable data without WebSocket connections
  */
@@ -58,7 +124,7 @@ export async function getMarketDataForClient() {
   try {
     const manager = getServerMarketDataManager();
     const restClient = manager.restClient;
-    
+
     // Fetch current market data
     const [products, btcTicker, ethTicker] = await Promise.all([
       restClient.getProducts(),

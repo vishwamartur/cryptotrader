@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -43,73 +43,99 @@ export function AlertsNotifications({
   const [error, setError] = useState<string | null>(null);
   const handleError = useErrorHandler();
 
+  // Use ref to track if we've processed the current alerts to prevent infinite loops
+  const processedAlertsRef = useRef<Alert[] | null>(null);
+  const lastProcessedHashRef = useRef<string>('');
+
   // Stable error logging function to prevent dependency issues
   const logError = useCallback((error: Error) => {
     if (enableErrorLogging) {
-      handleError(error);
-    }
-  }, [enableErrorLogging, handleError]);
-
-  // Safe array filtering with comprehensive error handling
-  useEffect(() => {
-    const filterAndSetAlerts = (alertsArray: Alert[] | null | undefined) => {
+      console.error('[AlertsNotifications] Error logged:', error.message);
       try {
-        // Reset error state on successful operation
-        setError(null);
-
-        // Handle null, undefined, or non-array cases
-        if (!alertsArray) {
-          console.debug('AlertsNotifications: alerts is null or undefined, using empty array');
-          setVisibleAlerts([]);
-          return;
-        }
-
-        if (!Array.isArray(alertsArray)) {
-          const errorMsg = `AlertsNotifications: alerts is not an array, received: ${typeof alertsArray}`;
-          console.error(errorMsg, alertsArray);
-
-          logError(new Error(errorMsg));
-
-          setError('Invalid alerts data format');
-          setVisibleAlerts([]);
-          return;
-        }
-
-        // Filter out dismissed alerts and limit to maxVisible
-        const filtered = alertsArray
-          .filter((alert) => {
-            // Additional safety check for each alert object
-            if (!alert || typeof alert !== 'object') {
-              console.warn('AlertsNotifications: Invalid alert object found:', alert);
-              return false;
-            }
-
-            // Check if alert has required properties
-            if (!alert.id || !alert.type || !alert.title) {
-              console.warn('AlertsNotifications: Alert missing required properties:', alert);
-              return false;
-            }
-
-            return !alert.dismissed;
-          })
-          .slice(0, maxVisible);
-
-        setVisibleAlerts(filtered);
-        console.debug(`AlertsNotifications: Filtered ${alertsArray.length} alerts to ${filtered.length} visible alerts`);
-
-      } catch (error) {
-        const errorMsg = `AlertsNotifications: Error filtering alerts: ${error instanceof Error ? error.message : 'Unknown error'}`;
-        console.error(errorMsg, error);
-
-        logError(error instanceof Error ? error : new Error(errorMsg));
-
-        setError('Failed to process alerts');
-        setVisibleAlerts([]);
+        handleError(error);
+      } catch (handlerError) {
+        console.error('[AlertsNotifications] Error handler failed:', handlerError);
       }
-    };
+    }
+  }, [enableErrorLogging]); // Removed handleError from dependencies to prevent infinite loop
 
-    filterAndSetAlerts(alerts);
-  }, [alerts, maxVisible, logError]);
+  // Memoize alerts processing to prevent infinite loops
+  const processedAlerts = useMemo(() => {
+    try {
+      // Create a hash of the alerts to detect changes
+      const alertsHash = alerts ? JSON.stringify(alerts.map(a => ({ id: a.id, dismissed: a.dismissed }))) : 'null';
+
+      // If alerts haven't changed, return the previous result
+      if (alertsHash === lastProcessedHashRef.current && processedAlertsRef.current) {
+        return processedAlertsRef.current;
+      }
+
+      console.debug('[AlertsNotifications] Processing alerts, hash:', alertsHash.substring(0, 50));
+
+      // Handle null, undefined, or non-array cases
+      if (!alerts) {
+        console.debug('AlertsNotifications: alerts is null or undefined, using empty array');
+        const result: Alert[] = [];
+        processedAlertsRef.current = result;
+        lastProcessedHashRef.current = alertsHash;
+        return result;
+      }
+
+      if (!Array.isArray(alerts)) {
+        const errorMsg = `AlertsNotifications: alerts is not an array, received: ${typeof alerts}`;
+        console.error(errorMsg, alerts);
+
+        // Set error but don't call logError to prevent infinite loop
+        setError('Invalid alerts data format');
+        const result: Alert[] = [];
+        processedAlertsRef.current = result;
+        lastProcessedHashRef.current = alertsHash;
+        return result;
+      }
+
+      // Filter out dismissed alerts and limit to maxVisible
+      const filtered = alerts
+        .filter((alert) => {
+          // Additional safety check for each alert object
+          if (!alert || typeof alert !== 'object') {
+            console.warn('AlertsNotifications: Invalid alert object found:', alert);
+            return false;
+          }
+
+          // Check if alert has required properties
+          if (!alert.id || !alert.type || !alert.title) {
+            console.warn('AlertsNotifications: Alert missing required properties:', alert);
+            return false;
+          }
+
+          return !alert.dismissed;
+        })
+        .slice(0, maxVisible);
+
+      console.debug(`AlertsNotifications: Filtered ${alerts.length} alerts to ${filtered.length} visible alerts`);
+
+      processedAlertsRef.current = filtered;
+      lastProcessedHashRef.current = alertsHash;
+      return filtered;
+
+    } catch (error) {
+      const errorMsg = `AlertsNotifications: Error filtering alerts: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      console.error(errorMsg, error);
+
+      setError('Failed to process alerts');
+      const result: Alert[] = [];
+      processedAlertsRef.current = result;
+      return result;
+    }
+  }, [alerts, maxVisible]);
+
+  // Update visible alerts when processed alerts change and reset error
+  useEffect(() => {
+    setVisibleAlerts(processedAlerts);
+    if (processedAlerts.length > 0) {
+      setError(null); // Reset error only when we have valid alerts
+    }
+  }, [processedAlerts]);
 
   // Safe dismiss handler with error handling
   const handleDismiss = useCallback((alertId: string) => {

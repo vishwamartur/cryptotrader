@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 
 // Utility function for safe number formatting
 const safeToFixed = (value: number | null | undefined, decimals: number = 2): string => {
@@ -29,7 +29,7 @@ import {
   WifiOff,
   AlertCircle
 } from 'lucide-react';
-import { useDynamicMarketData } from '@/hooks/use-dynamic-market-data';
+import { useWebSocketMarketData } from '@/hooks/use-websocket-market-data';
 import { RealtimeMarketData, ProductInfo } from '@/lib/realtime-market-data';
 
 interface LivePriceFeedsProps {
@@ -194,7 +194,17 @@ function PriceCard({ symbol, data, product, theme, onClick, isSelected, isLoadin
 }
 
 export function LivePriceFeeds({ theme, autoRefresh, refreshInterval }: LivePriceFeedsProps) {
-  const marketData = useDynamicMarketData();
+  // Use WebSocket-based market data with "all" symbol subscription for maximum efficiency
+  const marketData = useWebSocketMarketData({
+    autoConnect: true,
+    subscribeToAllSymbols: true, // ✅ Use "all" symbol subscription for ALL cryptocurrency pairs
+    subscribeToMajorPairs: false, // Disable individual subscriptions since we're using "all"
+    subscribeToAllProducts: false,
+    channels: ['v2/ticker', 'l1_orderbook'], // Enhanced channels for comprehensive real-time data
+    maxSymbols: 1000, // Allow all symbols
+    environment: 'production'
+  });
+
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'symbol' | 'price' | 'change' | 'volume'>('symbol');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
@@ -202,26 +212,40 @@ export function LivePriceFeeds({ theme, autoRefresh, refreshInterval }: LivePric
   const [productTypeFilter, setProductTypeFilter] = useState<string>('all');
   const [displayLimit, setDisplayLimit] = useState(20);
   const [isClient, setIsClient] = useState(false);
+  const [showAllProducts, setShowAllProducts] = useState(false);
+
+  // Use ref to track subscription state
+  const subscriptionStateRef = useRef({ majorPairs: false, allProducts: false });
 
   // Handle client-side hydration to prevent mismatch
   useEffect(() => {
     setIsClient(true);
   }, []);
 
-  // Auto-connect when component mounts
-  useEffect(() => {
-    if (!marketData.isConnected && marketData.products.length > 0) {
-      // Subscribe to top perpetual futures by default
-      const topSymbols = marketData.products
-        .filter(p => p.productType === 'perpetual_futures')
-        .slice(0, 20)
-        .map(p => p.symbol);
-
-      if (topSymbols.length > 0) {
-        marketData.subscribe(topSymbols);
-      }
+  // Handle subscription to all products when requested
+  const handleSubscribeToAllProducts = useCallback(() => {
+    if (marketData.isConnected && !subscriptionStateRef.current.allProducts) {
+      console.log('[LivePriceFeeds] Subscribing to all products');
+      marketData.subscribeToAllProducts(['ticker']);
+      subscriptionStateRef.current.allProducts = true;
+      setShowAllProducts(true);
     }
-  }, [marketData.products, marketData.isConnected, marketData]);
+  }, [marketData.isConnected, marketData.subscribeToAllProducts]);
+
+  // Handle subscription to major pairs only
+  const handleSubscribeToMajorPairs = useCallback(() => {
+    if (marketData.isConnected && subscriptionStateRef.current.allProducts) {
+      console.log('[LivePriceFeeds] Switching back to major pairs only');
+      // Disconnect and reconnect to reset subscriptions
+      marketData.disconnect();
+      setTimeout(() => {
+        marketData.connect();
+      }, 1000);
+      subscriptionStateRef.current.allProducts = false;
+      subscriptionStateRef.current.majorPairs = false;
+      setShowAllProducts(false);
+    }
+  }, [marketData.isConnected, marketData.disconnect, marketData.connect]);
 
   // Filter and sort products
   const filteredProducts = useMemo(() => {
@@ -231,49 +255,112 @@ export function LivePriceFeeds({ theme, autoRefresh, refreshInterval }: LivePric
     if (searchTerm) {
       filtered = filtered.filter(product =>
         product.symbol.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        product.underlyingAsset.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        product.description.toLowerCase().includes(searchTerm.toLowerCase())
+        product.underlying_asset?.symbol?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        product.description?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
 
     // Filter by product type
     if (productTypeFilter !== 'all') {
-      filtered = filtered.filter(product => product.productType === productTypeFilter);
+      filtered = filtered.filter(product => product.contract_type === productTypeFilter);
     }
 
     return filtered;
   }, [marketData.products, searchTerm, productTypeFilter]);
 
-  // Sort products with market data
-  const sortedProducts = useMemo(() => {
-    return [...filteredProducts].sort((a, b) => {
-      const aData = marketData.marketData.get(a.symbol);
-      const bData = marketData.marketData.get(b.symbol);
+  // Access the Map data structure correctly from the WebSocket hook
+  const marketDataMap = useMemo(() => {
+    // The marketData from useWebSocketMarketData is already a Map
+    if (marketData.marketData instanceof Map) {
+      return marketData.marketData;
+    }
 
-      let comparison = 0;
-      switch (sortBy) {
-        case 'symbol':
-          comparison = a.symbol.localeCompare(b.symbol);
-          break;
-        case 'price':
-          if (!aData || !bData) return 0;
-          comparison = aData.price - bData.price;
-          break;
-        case 'change':
-          if (!aData || !bData) return 0;
-          comparison = aData.changePercent - bData.changePercent;
-          break;
-        case 'volume':
-          if (!aData || !bData) return 0;
-          comparison = aData.volume - bData.volume;
-          break;
-        default:
-          comparison = a.symbol.localeCompare(b.symbol);
+    // Fallback: if it's not a Map, create one
+    console.warn('[LivePriceFeeds] marketData.marketData is not a Map, creating fallback');
+    const dataMap = new Map();
+
+    if (Array.isArray(marketData.marketDataArray)) {
+      marketData.marketDataArray.forEach(item => {
+        dataMap.set(item.symbol, {
+          symbol: item.symbol,
+          price: parseFloat(item.price),
+          change: parseFloat(item.change),
+          changePercent: parseFloat(item.changePercent),
+          volume: parseFloat(item.volume),
+          high: parseFloat(item.high),
+          low: parseFloat(item.low),
+          lastUpdate: item.lastUpdate
+        });
+      });
+    }
+
+    return dataMap;
+  }, [marketData.marketData, marketData.marketDataArray]);
+
+  // Sort products with market data - with proper error handling
+  const sortedProducts = useMemo(() => {
+    try {
+      if (!Array.isArray(filteredProducts)) {
+        console.warn('[LivePriceFeeds] filteredProducts is not an array:', typeof filteredProducts);
+        return [];
       }
 
-      return sortOrder === 'asc' ? comparison : -comparison;
-    }).slice(0, displayLimit);
-  }, [filteredProducts, marketData.marketData, sortBy, sortOrder, displayLimit]);
+      if (!marketDataMap || typeof marketDataMap.get !== 'function') {
+        console.warn('[LivePriceFeeds] marketDataMap is not a valid Map:', typeof marketDataMap);
+        return filteredProducts.slice(0, displayLimit);
+      }
+
+      return [...filteredProducts].sort((a, b) => {
+        // Validate product objects
+        if (!a || !b || !a.symbol || !b.symbol) {
+          console.warn('[LivePriceFeeds] Invalid product objects in sort:', { a, b });
+          return 0;
+        }
+
+        const aData = marketDataMap.get(a.symbol);
+        const bData = marketDataMap.get(b.symbol);
+
+        let comparison = 0;
+
+        try {
+          switch (sortBy) {
+            case 'symbol':
+              comparison = (a.symbol || '').localeCompare(b.symbol || '');
+              break;
+            case 'price':
+              if (!aData || !bData || typeof aData.price !== 'number' || typeof bData.price !== 'number') {
+                return 0;
+              }
+              comparison = aData.price - bData.price;
+              break;
+            case 'change':
+              if (!aData || !bData || typeof aData.changePercent !== 'number' || typeof bData.changePercent !== 'number') {
+                return 0;
+              }
+              comparison = aData.changePercent - bData.changePercent;
+              break;
+            case 'volume':
+              if (!aData || !bData || typeof aData.volume !== 'number' || typeof bData.volume !== 'number') {
+                return 0;
+              }
+              comparison = aData.volume - bData.volume;
+              break;
+            default:
+              comparison = (a.symbol || '').localeCompare(b.symbol || '');
+          }
+        } catch (sortError) {
+          console.warn('[LivePriceFeeds] Error in sort comparison:', sortError);
+          return 0;
+        }
+
+        return sortOrder === 'asc' ? comparison : -comparison;
+      }).slice(0, displayLimit);
+
+    } catch (sortingError) {
+      console.error('[LivePriceFeeds] Error in sorting products:', sortingError);
+      return filteredProducts.slice(0, displayLimit);
+    }
+  }, [filteredProducts, marketDataMap, sortBy, sortOrder, displayLimit]);
 
   const handleSort = (criteria: 'symbol' | 'price' | 'change' | 'volume') => {
     if (sortBy === criteria) {
@@ -290,7 +377,7 @@ export function LivePriceFeeds({ theme, autoRefresh, refreshInterval }: LivePric
     ).slice(0, 10);
 
     if (unsubscribedProducts.length > 0) {
-      marketData.subscribe(unsubscribedProducts.map(p => p.symbol));
+      marketData.subscribeToSymbols(unsubscribedProducts.map(p => p.symbol));
     }
   };
 
@@ -316,20 +403,20 @@ export function LivePriceFeeds({ theme, autoRefresh, refreshInterval }: LivePric
             <Button
               variant="outline"
               size="sm"
-              onClick={marketData.refresh}
-              disabled={marketData.isLoading}
+              onClick={showAllProducts ? handleSubscribeToMajorPairs : handleSubscribeToAllProducts}
+              disabled={marketData.isConnecting}
               className="flex items-center gap-1"
             >
-              <RefreshCw className={`w-3 h-3 ${marketData.isLoading ? 'animate-spin' : ''}`} />
-              Refresh
+              <RefreshCw className={`w-3 h-3 ${marketData.isConnecting ? 'animate-spin' : ''}`} />
+              {showAllProducts ? 'Major Pairs Only' : 'All Products'}
             </Button>
             <Button
               variant="outline"
               size="sm"
               onClick={handleSubscribeToMore}
-              disabled={marketData.isLoading}
+              disabled={marketData.isConnecting}
             >
-              Load More
+              Subscribe More
             </Button>
           </div>
         </div>
@@ -370,6 +457,68 @@ export function LivePriceFeeds({ theme, autoRefresh, refreshInterval }: LivePric
               <SelectItem value="100">100</SelectItem>
             </SelectContent>
           </Select>
+        </div>
+
+        {/* Error Display */}
+        {marketData.error && (
+          <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-md">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-red-800">Connection Error</h3>
+                <div className="mt-1 text-sm text-red-700">
+                  {marketData.error}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Connection Status */}
+        <div className="mt-2 p-2 bg-gray-50 rounded-md">
+          <div className="flex items-center justify-between text-sm">
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
+                <div className={`w-2 h-2 rounded-full ${
+                  marketData.isConnected ? 'bg-green-500' :
+                  marketData.isConnecting ? 'bg-yellow-500 animate-pulse' : 'bg-red-500'
+                }`} />
+                <span className={`font-medium ${
+                  marketData.isConnected ? 'text-green-700' :
+                  marketData.isConnecting ? 'text-yellow-700' : 'text-red-700'
+                }`}>
+                  {marketData.isConnected ? 'Connected' :
+                   marketData.isConnecting ? 'Connecting...' : 'Disconnected'}
+                </span>
+              </div>
+              {marketData.isAuthenticated && (
+                <span className="text-green-600 text-xs">✓ Authenticated</span>
+              )}
+            </div>
+            <div className="text-gray-500">
+              {marketData.lastUpdate && (
+                <span>Updated: {marketData.lastUpdate.toLocaleTimeString()}</span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* WebSocket Statistics */}
+        <div className="flex items-center justify-between text-sm text-gray-500 mt-2 pt-2 border-t">
+          <div className="flex items-center space-x-4">
+            <span>Products: {marketData.totalProducts || 0}</span>
+            <span>Active: {marketData.activeProducts || 0}</span>
+            <span>Subscribed: {marketData.subscribedSymbols?.length || 0}</span>
+            <span>Live Data: {marketData.connectedSymbols || 0}</span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <span>Status: {marketData.connectionStatus || 'unknown'}</span>
+            <span>Filtered: {sortedProducts.length}</span>
+          </div>
         </div>
 
         {/* Sort Controls */}

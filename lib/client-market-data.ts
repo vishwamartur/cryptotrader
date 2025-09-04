@@ -34,6 +34,10 @@ export class ClientMarketDataManager extends EventEmitter {
   private isConnected: boolean = false;
   private pollingInterval: NodeJS.Timeout | null = null;
   private readonly POLLING_INTERVAL = 2000; // 2 seconds
+  private subscribedSymbols: string[] = [];
+  private lastUpdateTime: number = 0;
+  private networkStatus: boolean = true;
+  private loadingProducts: boolean = false;
 
   constructor() {
     super();
@@ -43,48 +47,64 @@ export class ClientMarketDataManager extends EventEmitter {
   async connect(): Promise<void> {
     try {
       console.log('[ClientMarketDataManager] Connecting...');
-      
+
       // Load initial data
       await this.loadProducts();
       await this.fetchMarketData();
-      
+
       // Start polling for updates
       this.startPolling();
-      
+
       this.isConnected = true;
+      this.networkStatus = true;
       this.emit('connected');
-      
+      this.emit('networkStatusChanged', { online: true });
+
       console.log('[ClientMarketDataManager] Connected successfully');
     } catch (error) {
       console.error('[ClientMarketDataManager] Connection failed:', error);
+      this.isConnected = false;
+      this.networkStatus = false;
       this.emit('error', error);
+      this.emit('networkStatusChanged', { online: false });
       throw error;
     }
   }
 
   disconnect(): void {
     console.log('[ClientMarketDataManager] Disconnecting...');
-    
+
     if (this.pollingInterval) {
       clearInterval(this.pollingInterval);
       this.pollingInterval = null;
     }
-    
+
     this.isConnected = false;
     this.emit('disconnected');
+    this.emit('networkStatusChanged', { online: false });
   }
 
-  private async loadProducts(): Promise<void> {
+  async loadProducts(): Promise<void> {
     try {
+      this.loadingProducts = true;
+      this.emit('loadingProducts', true);
+
       const response = await fetch('/api/market/products');
       const data = await response.json();
-      
+
       if (data.success && data.result) {
         this.products = data.result;
+        this.emit('productsLoaded', this.products);
         this.emit('products', this.products);
       }
+
+      this.loadingProducts = false;
+      this.emit('loadingProducts', false);
     } catch (error) {
       console.error('[ClientMarketDataManager] Failed to load products:', error);
+      this.loadingProducts = false;
+      this.emit('loadingProducts', false);
+      this.emit('error', error);
     }
   }
 
@@ -92,18 +112,32 @@ export class ClientMarketDataManager extends EventEmitter {
     try {
       const response = await fetch('/api/market/realtime-data');
       const data = await response.json();
-      
+
       if (data.success && data.marketData) {
-        // Update market data map
+        // Update market data map and emit individual updates
         data.marketData.forEach((item: RealtimeMarketData) => {
+          const previous = this.marketData.get(item.symbol);
           this.marketData.set(item.symbol, item);
+
+          // Emit individual market data update
+          this.emit('marketData', {
+            symbol: item.symbol,
+            data: item,
+            previous
+          });
         });
-        
-        // Emit updated data
+
+        // Update last update time
+        this.lastUpdateTime = Date.now();
+        this.emit('dataUpdated', this.lastUpdateTime);
+
+        // Emit updated data array
         this.emit('data', Array.from(this.marketData.values()));
       }
     } catch (error) {
       console.error('[ClientMarketDataManager] Failed to fetch market data:', error);
+      this.networkStatus = false;
+      this.emit('networkStatusChanged', { online: false });
       this.emit('error', error);
     }
   }
@@ -130,15 +164,63 @@ export class ClientMarketDataManager extends EventEmitter {
     return this.isConnected;
   }
 
+  // Connection info method required by the hook
+  getConnectionInfo(): {
+    connected: boolean;
+    subscribedSymbols: string[];
+    lastUpdateTime: number;
+    networkStatus: boolean;
+    loadingProducts: boolean;
+  } {
+    return {
+      connected: this.isConnected,
+      subscribedSymbols: this.subscribedSymbols,
+      lastUpdateTime: this.lastUpdateTime,
+      networkStatus: this.networkStatus,
+      loadingProducts: this.loadingProducts
+    };
+  }
+
+  // Get all market data as Map (required by hook)
+  getAllMarketData(): Map<string, RealtimeMarketData> {
+    return new Map(this.marketData);
+  }
+
   // Subscribe methods for compatibility (client-side doesn't need real subscriptions)
   subscribe(symbols: string[]): void {
     console.log('[ClientMarketDataManager] Subscribe called for:', symbols);
+    this.subscribedSymbols = [...new Set([...this.subscribedSymbols, ...symbols])];
+    this.emit('subscribed', symbols);
     // Client-side polling handles all symbols automatically
   }
 
   unsubscribe(symbols: string[]): void {
     console.log('[ClientMarketDataManager] Unsubscribe called for:', symbols);
+    this.subscribedSymbols = this.subscribedSymbols.filter(s => !symbols.includes(s));
+    this.emit('unsubscribed', symbols);
     // Client-side polling handles all symbols automatically
+  }
+
+  // Subscribe to all available symbols
+  subscribeToAll(): void {
+    const allSymbols = this.products.map(p => p.symbol);
+    this.subscribe(allSymbols);
+  }
+
+  // Get products by type
+  getProductsByType(productType: string): ProductInfo[] {
+    return this.products.filter(p => p.product_type === productType);
+  }
+
+  // Refresh method for compatibility
+  async refresh(): Promise<void> {
+    await this.loadProducts();
+    await this.fetchMarketData();
+  }
+
+  // Event listener management methods
+  off(event: string, listener: (...args: any[]) => void): this {
+    return this.removeListener(event, listener);
   }
 }
 

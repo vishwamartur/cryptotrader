@@ -20,7 +20,7 @@ import {
   ArrowDownRight,
   Activity
 } from 'lucide-react';
-import { useDynamicMarketData } from '@/hooks/use-dynamic-market-data';
+import { useWebSocketMarketData } from '@/hooks/use-websocket-market-data';
 import { RealtimeMarketData, ProductInfo } from '@/lib/realtime-market-data';
 
 interface LivePriceFeedsOptimizedProps {
@@ -127,7 +127,16 @@ const OptimizedPriceCard = React.memo<OptimizedPriceCardProps>(({
 OptimizedPriceCard.displayName = 'OptimizedPriceCard';
 
 export function LivePriceFeedsOptimized({ theme, autoRefresh, refreshInterval }: LivePriceFeedsOptimizedProps) {
-  const marketData = useDynamicMarketData();
+  // Use WebSocket-based market data with "all" symbol subscription for maximum performance
+  const marketData = useWebSocketMarketData({
+    autoConnect: true,
+    subscribeToAllSymbols: true, // ✅ Use "all" symbol subscription for ALL cryptocurrency pairs
+    subscribeToMajorPairs: false, // Disable individual subscriptions since we're using "all"
+    subscribeToAllProducts: false,
+    channels: ['v2/ticker', 'l1_orderbook', 'all_trades'], // Enhanced channels for comprehensive real-time data
+    maxSymbols: 1000, // Allow all symbols for maximum coverage
+    environment: 'production'
+  });
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'symbol' | 'price' | 'change' | 'volume'>('symbol');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
@@ -156,16 +165,16 @@ export function LivePriceFeedsOptimized({ theme, autoRefresh, refreshInterval }:
     // Filter by search term
     if (searchTerm) {
       const searchLower = searchTerm.toLowerCase();
-      filtered = filtered.filter(product => 
+      filtered = filtered.filter(product =>
         product.symbol.toLowerCase().includes(searchLower) ||
-        product.underlyingAsset.toLowerCase().includes(searchLower) ||
-        product.description.toLowerCase().includes(searchLower)
+        product.underlying_asset?.symbol?.toLowerCase().includes(searchLower) ||
+        product.description?.toLowerCase().includes(searchLower)
       );
     }
 
     // Filter by product type
     if (productTypeFilter !== 'all') {
-      filtered = filtered.filter(product => product.productType === productTypeFilter);
+      filtered = filtered.filter(product => product.contract_type === productTypeFilter);
     }
 
     // Sort products
@@ -213,7 +222,7 @@ export function LivePriceFeedsOptimized({ theme, autoRefresh, refreshInterval }:
       .slice(0, 20);
     
     if (unsubscribedProducts.length > 0) {
-      marketData.subscribe(unsubscribedProducts.map(p => p.symbol));
+      marketData.subscribeToSymbols(unsubscribedProducts.map(p => p.symbol));
     }
   }, [filteredAndSortedProducts, marketData]);
 

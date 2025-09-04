@@ -209,27 +209,38 @@ export function UnifiedDashboard({ initialView }: UnifiedDashboardProps = {}) {
     setShowWelcome(!savedWelcome)
   }, [])
 
-  // Client-side time formatting
+  // Client-side time formatting - use current time instead of lastUpdate to prevent infinite loop
   useEffect(() => {
+    console.log('[UnifiedDashboard] Setting up time formatting updates');
+
     const updateTimeString = () => {
-      setClientTimeString(lastUpdate.toLocaleTimeString())
+      setClientTimeString(new Date().toLocaleTimeString())
     }
 
-    updateTimeString()
+    updateTimeString() // Initial update
     const interval = setInterval(updateTimeString, 1000)
-    return () => clearInterval(interval)
-  }, [lastUpdate])
 
-  // Simulate real-time data updates
+    return () => {
+      console.log('[UnifiedDashboard] Cleaning up time formatting interval');
+      clearInterval(interval);
+    }
+  }, []) // Empty dependency array to prevent infinite loop
+
+  // Real-time data updates
   useEffect(() => {
+    console.log('[UnifiedDashboard] Setting up real-time data updates, interval:', layout.refreshInterval || 5000);
     setConnectionStatus('connected')
 
     const updateInterval = setInterval(() => {
+      console.log('[UnifiedDashboard] Triggering data update');
       setLastUpdate(new Date())
     }, layout.refreshInterval || 5000)
 
-    return () => clearInterval(updateInterval)
-  }, [layout.refreshInterval])
+    return () => {
+      console.log('[UnifiedDashboard] Cleaning up real-time data update interval');
+      clearInterval(updateInterval);
+    }
+  }, [layout.refreshInterval]) // Only depend on refreshInterval
 
   // Save layout changes
   const saveLayout = useCallback((newLayout: DashboardLayout) => {

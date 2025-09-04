@@ -32,11 +32,17 @@ export async function GET() {
     const errorMessage = error instanceof Error ? error.message : "Unknown error"
     
     // Provide helpful error messages
-    if (errorMessage.includes("credentials not found")) {
+    if (errorMessage.includes("credentials not found") || errorMessage.includes("credentials are required")) {
       return NextResponse.json({
         success: false,
         error: "Delta Exchange API credentials not configured",
-        details: "Please set DELTA_API_KEY and DELTA_API_SECRET environment variables",
+        details: "Please set DELTA_EXCHANGE_API_KEY and DELTA_EXCHANGE_API_SECRET environment variables",
+        suggestions: [
+          "Get your API credentials from: https://www.delta.exchange/app/api-management",
+          "Set DELTA_EXCHANGE_API_KEY in your environment",
+          "Set DELTA_EXCHANGE_API_SECRET in your environment",
+          "Restart the application after setting credentials"
+        ],
         code: "MISSING_CREDENTIALS"
       }, { status: 400 })
     }
@@ -46,6 +52,13 @@ export async function GET() {
         success: false,
         error: "Invalid Delta Exchange API credentials",
         details: "Please verify your API key and secret are correct",
+        suggestions: [
+          "Verify your API key is correct and active",
+          "Ensure you're using production keys (not testnet)",
+          "Check that your API key hasn't expired",
+          "Verify the API key format is correct (no extra spaces)",
+          "Visit https://www.delta.exchange/app/api-management to manage your API keys"
+        ],
         code: "INVALID_CREDENTIALS"
       }, { status: 401 })
     }
