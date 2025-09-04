@@ -72,11 +72,20 @@ export class DeltaExchangeAPI {
 
     const headers: Record<string, string> = {
       "api-key": this.apiKey,
-      signature: signature,
-      timestamp: timestamp,
+      "signature": signature,
+      "timestamp": timestamp,
       "User-Agent": "CryptoTrader/1.0",
       "Content-Type": "application/json",
     }
+
+    // Debug logging for authentication (without exposing secrets)
+    console.log(`[Delta Exchange Auth] API Key: ${this.apiKey.substring(0, 8)}...${this.apiKey.slice(-4)}`)
+    console.log(`[Delta Exchange Auth] Timestamp: ${timestamp}`)
+    console.log(`[Delta Exchange Auth] Method: ${method.toUpperCase()}`)
+    console.log(`[Delta Exchange Auth] Path: ${requestPath}`)
+    console.log(`[Delta Exchange Auth] Query: ${queryString}`)
+    console.log(`[Delta Exchange Auth] Body: ${bodyString ? 'present' : 'empty'}`)
+    console.log(`[Delta Exchange Auth] Signature: ${signature.substring(0, 16)}...`)
 
     // For URL: query params with leading "?" if they exist
     const url = `${DELTA_BASE_URL}${endpoint}${queryString ? `?${queryString}` : ""}`
@@ -105,17 +114,26 @@ export class DeltaExchangeAPI {
 
           console.error(`Delta Exchange API Error ${response.status}:`, errorData)
 
-          if (errorData.error?.code === "invalid_api_key") {
+          if (errorData.error?.code === "invalid_api_key" || errorData.code === "invalid_api_key" ||
+              (typeof errorData === 'string' && errorData.includes('invalid_api_key'))) {
             throw new Error(
               "Invalid API key. Please check your Delta Exchange API credentials:\n" +
                 "1. Ensure you're using the correct API key\n" +
                 "2. Verify you're using production keys (not testnet)\n" +
                 "3. Check that your API key has trading permissions\n" +
                 "4. Make sure your API key hasn't expired\n" +
+                "5. Verify the API key format is correct (no extra spaces or characters)\n" +
                 "Visit https://www.delta.exchange/app/api-management to manage your API keys.",
             )
-          } else if (errorData.error?.code === "invalid_signature") {
-            throw new Error("Invalid signature. There may be an issue with your API secret or system time.")
+          } else if (errorData.error?.code === "invalid_signature" || errorData.code === "invalid_signature" ||
+                     (typeof errorData === 'string' && errorData.includes('invalid_signature'))) {
+            throw new Error(
+              "Invalid signature. There may be an issue with your API secret or system time:\n" +
+                "1. Verify your API secret is correct\n" +
+                "2. Check your system time is synchronized\n" +
+                "3. Ensure no extra spaces in your API credentials\n" +
+                "4. Verify the signature generation algorithm is correct"
+            )
           } else if (errorData.error?.code === "insufficient_permissions") {
             throw new Error("Insufficient permissions. Please enable trading permissions for your API key.")
           } else if (errorData.error?.message) {
