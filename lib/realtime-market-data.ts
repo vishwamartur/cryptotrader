@@ -73,7 +73,7 @@ class RealtimeMarketDataManager extends EventEmitter {
   constructor() {
     super();
 
-    // Initialize WebSocket clients
+    // Initialize WebSocket clients - will throw if credentials are missing
     this.wsClient = createDeltaWebSocketClient();
     const restClient = createDeltaExchangeAPIFromEnv();
     this.wsAPI = createDeltaWebSocketAPI(this.wsClient, restClient);
@@ -81,6 +81,8 @@ class RealtimeMarketDataManager extends EventEmitter {
     this.setupWebSocketEventHandlers();
     this.setupNetworkMonitoring();
     this.loadProducts();
+
+    console.log('[RealtimeMarketDataManager] Initialized successfully with live Delta Exchange connection');
   }
 
   // Setup WebSocket event handlers
@@ -147,6 +149,8 @@ class RealtimeMarketDataManager extends EventEmitter {
 
     this.emit(`marketData:${tickerData.symbol}`, marketData);
   }
+
+
 
   // Setup network monitoring
   private setupNetworkMonitoring(): void {

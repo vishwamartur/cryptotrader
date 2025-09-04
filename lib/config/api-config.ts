@@ -28,7 +28,7 @@ export interface ApplicationConfiguration {
   url: string;
   apiBaseUrl: string;
   wsUrl: string;
-  demoMode: boolean;
+  liveMode: boolean;
 }
 
 export interface TradingConfiguration {
@@ -262,7 +262,7 @@ export class APIConfigService {
       url: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
       apiBaseUrl: process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000/api',
       wsUrl: process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:3000',
-      demoMode: process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
+      liveMode: true // Always live mode - no demo mode support
     };
   }
 

@@ -369,14 +369,28 @@ export class DeltaWebSocketClient extends EventEmitter {
   }
 }
 
+
+
 // Factory function to create client with environment credentials
 export function createDeltaWebSocketClient(config: Partial<DeltaWebSocketConfig> = {}): DeltaWebSocketClient {
+  // Try both naming conventions for backward compatibility
+  const apiKey = process.env.DELTA_API_KEY || process.env.DELTA_EXCHANGE_API_KEY;
+  const apiSecret = process.env.DELTA_API_SECRET || process.env.DELTA_EXCHANGE_API_SECRET;
+
+  if (!apiKey || !apiSecret) {
+    throw new Error(
+      'Delta Exchange WebSocket credentials are required. Please set DELTA_EXCHANGE_API_KEY and DELTA_EXCHANGE_API_SECRET environment variables. ' +
+      'Get your API credentials from: https://www.delta.exchange/app/api-management'
+    );
+  }
+
   const defaultConfig: DeltaWebSocketConfig = {
-    apiKey: process.env.DELTA_API_KEY,
-    apiSecret: process.env.DELTA_API_SECRET,
-    baseUrl: process.env.DELTA_WS_URL || 'wss://socket.india.delta.exchange',
+    apiKey,
+    apiSecret,
+    baseUrl: process.env.NEXT_PUBLIC_DELTA_WS_URL || process.env.DELTA_WS_URL || 'wss://socket.india.delta.exchange',
     ...config,
   };
 
+  console.log('[WebSocket Factory] Creating live WebSocket client with credentials');
   return new DeltaWebSocketClient(defaultConfig);
 }

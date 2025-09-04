@@ -5,7 +5,6 @@
 
 // Mock environment variables for integration tests
 process.env.NODE_ENV = 'test';
-process.env.NEXT_PUBLIC_DEMO_MODE = 'true';
 process.env.PERPLEXITY_API_KEY = 'test-api-key';
 process.env.DELTA_EXCHANGE_API_KEY = 'test-delta-key';
 process.env.DELTA_EXCHANGE_API_SECRET = 'test-delta-secret';

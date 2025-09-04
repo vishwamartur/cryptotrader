@@ -84,14 +84,15 @@ npm run dev
 
 ### **Environment Configuration**
 ```env
+# Required: Delta Exchange API credentials for live trading
+DELTA_EXCHANGE_API_KEY=your_delta_exchange_api_key_here
+DELTA_EXCHANGE_API_SECRET=your_delta_exchange_api_secret_here
+
 # Optional: WebSocket URL for real-time data
 NEXT_PUBLIC_WS_URL=ws://localhost:3001
 
 # Optional: API base URL
 NEXT_PUBLIC_API_BASE_URL=http://localhost:3000/api
-
-# Optional: Enable demo mode with mock data
-NEXT_PUBLIC_DEMO_MODE=true
 ```
 
 ## 📊 Dashboard Components
@@ -285,14 +286,15 @@ npm start
 
 ### **Environment Variables**
 ```env
+# Production Delta Exchange API credentials
+DELTA_EXCHANGE_API_KEY=your_production_api_key
+DELTA_EXCHANGE_API_SECRET=your_production_api_secret
+
 # Production WebSocket URL
 NEXT_PUBLIC_WS_URL=wss://api.cryptotrader.com/ws
 
 # Production API URL
 NEXT_PUBLIC_API_BASE_URL=https://api.cryptotrader.com
-
-# Disable demo mode
-NEXT_PUBLIC_DEMO_MODE=false
 ```
 
 ## 🎯 Future Enhancements

@@ -8,19 +8,23 @@ interface DeltaExchangeConfig {
   apiSecret: string
 }
 
-// Get Delta Exchange credentials from environment
+// Get Delta Exchange credentials from environment (required)
 export function getDeltaCredentials(): DeltaExchangeConfig {
-  const apiKey = process.env.DELTA_API_KEY
-  const apiSecret = process.env.DELTA_API_SECRET
+  // Try both naming conventions for backward compatibility
+  const apiKey = process.env.DELTA_API_KEY || process.env.DELTA_EXCHANGE_API_KEY
+  const apiSecret = process.env.DELTA_API_SECRET || process.env.DELTA_EXCHANGE_API_SECRET
 
   if (!apiKey || !apiSecret) {
     throw new Error(
-      "Delta Exchange API credentials not found. Please set DELTA_API_KEY and DELTA_API_SECRET environment variables."
+      'Delta Exchange API credentials are required. Please set DELTA_EXCHANGE_API_KEY and DELTA_EXCHANGE_API_SECRET environment variables. ' +
+      'Get your API credentials from: https://www.delta.exchange/app/api-management'
     )
   }
 
   return { apiKey, apiSecret }
 }
+
+
 
 export class DeltaExchangeAPI {
   private apiKey: string
@@ -182,7 +186,8 @@ export function createDeltaExchangeAPI(apiKey: string, apiSecret: string) {
 }
 
 // Utility function to create API instance from environment variables
-export function createDeltaExchangeAPIFromEnv() {
+export function createDeltaExchangeAPIFromEnv(): DeltaExchangeAPI {
   const credentials = getDeltaCredentials()
+  console.log('[Delta Exchange] Creating live API instance with credentials')
   return new DeltaExchangeAPI(credentials)
 }

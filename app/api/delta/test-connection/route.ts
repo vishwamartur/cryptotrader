@@ -3,26 +3,27 @@ import { createDeltaExchangeAPIFromEnv, getDeltaCredentials } from "@/lib/delta-
 
 export async function GET() {
   try {
-    // Check if credentials are available
+    // Get credentials - will throw if not available
     const credentials = getDeltaCredentials()
-    
+
     // Create API instance
     const deltaAPI = createDeltaExchangeAPIFromEnv()
-    
+
     // Test connection with a simple balance request
     const balanceData = await deltaAPI.getBalance()
-    
+
     // Test public API as well
     const products = await deltaAPI.getProducts()
-    
+
     return NextResponse.json({
       success: true,
       message: "Delta Exchange API connection successful",
       data: {
+        mode: "live",
         apiKeyMasked: `${credentials.apiKey.substring(0, 8)}...${credentials.apiKey.slice(-4)}`,
         balanceCount: balanceData.result?.length || 0,
         productsCount: products.result?.length || 0,
-        timestamp: new Date().toISOString(),
+        timestamp: new Date().toISOString()
       }
     })
   } catch (error) {
