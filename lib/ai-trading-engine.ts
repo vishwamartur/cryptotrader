@@ -479,6 +479,39 @@ Respond with a JSON object containing:
     this.config = { ...this.config, ...newConfig }
   }
 
+  getPerformanceMetrics(): PerformanceMetrics {
+    return { ...this.performanceMetrics }
+  }
+
+  getCacheStats(): {
+    keys: number
+    hits: number
+    misses: number
+    hitRate: number
+    ksize: number
+  } {
+    const stats = this.cache.getStats()
+    return {
+      keys: stats.keys,
+      hits: stats.hits,
+      misses: stats.misses,
+      hitRate: stats.hits / (stats.hits + stats.misses) || 0,
+      ksize: stats.ksize
+    }
+  }
+
+  clearCache(): void {
+    this.cache.flushAll()
+  }
+
+  preloadCache(marketData: MarketData[], positions: Position[], balance: number): void {
+    if (!this.config.cacheEnabled) return
+
+    const analysis = this.getDefaultAnalysis(marketData[0]?.price || 45000)
+    const cacheKey = this.generateCacheKey(marketData, positions, balance)
+    this.cacheAnalysis(cacheKey, analysis)
+  }
+
   private parseAIResponse(analysisText: string, currentPrice: number): MarketAnalysis {
     try {
       // Try to extract JSON from the AI response
