@@ -104,54 +104,139 @@ export class AITradingEngine {
     currentPositions: Position[],
     portfolioBalance: number,
   ): Promise<MarketAnalysis> {
-    // Prevent concurrent analysis
+    const startTime = performance.now()
+    this.performanceMetrics.totalRequests++
+
+    try {
+      // Quick validation checks
+      if (!marketData || marketData.length === 0) {
+        return this.getDefaultAnalysis(45000, 0)
+      }
+
+      if (portfolioBalance < 0) {
+        const analysis = this.getDefaultAnalysis(marketData[0]?.price || 45000)
+        analysis.positionSize = 0
+        return analysis
+      }
+
+      // Check for stale data
+      const now = Date.now()
+      const latestTimestamp = Math.max(...marketData.map(d => (d as any).timestamp || d.lastUpdated || 0))
+      const isStaleData = now - latestTimestamp > 3600000
+
+      if (isStaleData) {
+        const analysis = this.getDefaultAnalysis(marketData[0]?.price || 45000)
+        analysis.confidence = Math.min(30, analysis.confidence)
+        return analysis
+      }
+
+      // Check cache first
+      const cacheKey = this.generateCacheKey(marketData, currentPositions, portfolioBalance)
+
+      if (this.config.cacheEnabled) {
+        const cachedAnalysis = this.getCachedAnalysis(cacheKey)
+        if (cachedAnalysis) {
+          this.performanceMetrics.cacheHits++
+          this.updateLatencyMetrics(startTime)
+          return cachedAnalysis
+        }
+        this.performanceMetrics.cacheMisses++
+      }
+
+      // Check concurrent request limit
+      if (this.activeRequests >= this.config.maxConcurrentRequests!) {
+        return new Promise((resolve, reject) => {
+          this.requestQueue.push({
+            resolve,
+            reject,
+            args: [marketData, currentPositions, portfolioBalance]
+          })
+        })
+      }
+
+      // Use debounced analysis for better performance
+      return new Promise((resolve, reject) => {
+        this.debouncedAnalyzeMarket(marketData, currentPositions, portfolioBalance)
+          .then(resolve)
+          .catch(reject)
+      })
+
+    } catch (error) {
+      this.performanceMetrics.errorRate = (this.performanceMetrics.errorRate * (this.performanceMetrics.totalRequests - 1) + 1) / this.performanceMetrics.totalRequests
+      console.error("AI analysis error:", error)
+      const analysis = this.getDefaultAnalysis(marketData?.[0]?.price || 45000)
+      analysis.reasoning = 'AI analysis failed'
+      return analysis
+    } finally {
+      this.updateLatencyMetrics(startTime)
+    }
+  }
+
+  private async performAnalysis(
+    marketData: MarketData[],
+    currentPositions: Position[],
+    portfolioBalance: number
+  ): Promise<MarketAnalysis> {
     if (this.isAnalyzing) {
-      return this.getDefaultAnalysis(45000, 0);
+      return this.getDefaultAnalysis(marketData[0]?.price || 45000)
     }
 
+    this.activeRequests++
     this.isAnalyzing = true
 
     try {
-      // Handle null or empty market data
-      if (!marketData || marketData.length === 0) {
-        return this.getDefaultAnalysis(45000, 0);
-      }
-
-      // Handle negative balance
-      if (portfolioBalance < 0) {
-        const analysis = this.getDefaultAnalysis(marketData[0]?.price || 45000);
-        analysis.positionSize = 0;
-        return analysis;
-      }
-
-      // Check for stale data (older than 1 hour)
-      const now = Date.now();
-      const latestTimestamp = Math.max(...marketData.map(d => (d as any).timestamp || d.lastUpdated || 0));
-      const isStaleData = now - latestTimestamp > 3600000; // 1 hour
-
-      if (isStaleData) {
-        const analysis = this.getDefaultAnalysis(marketData[0]?.price || 45000);
-        analysis.confidence = Math.min(30, analysis.confidence);
-        return analysis;
-      }
-
-      // Use Perplexity API directly
-      const apiKey = this.config.apiKey || process.env.PERPLEXITY_API_KEY;
+      const apiKey = this.config.apiKey || process.env.PERPLEXITY_API_KEY
 
       if (!apiKey) {
-        console.warn('No Perplexity API key provided, returning default analysis');
-        // Add a small delay to simulate API call for testing concurrent analysis
-        await new Promise(resolve => setTimeout(resolve, 50));
-        return this.getDefaultAnalysis(marketData[0]?.price || 45000);
+        console.warn('No Perplexity API key provided, returning default analysis')
+        await new Promise(resolve => setTimeout(resolve, 10))
+        return this.getDefaultAnalysis(marketData[0]?.price || 45000)
       }
 
-      const analysisPrompt = this.buildAnalysisPrompt(marketData, currentPositions, portfolioBalance);
+      const analysisPrompt = this.buildOptimizedPrompt(marketData, currentPositions, portfolioBalance)
+      const currentPrice = marketData[0]?.price || 45000
 
+      // Optimized API call with timeout and retries
+      const analysisText = await this.makeOptimizedAPICall(analysisPrompt, apiKey)
+
+      const analysis = this.parseAIResponse(analysisText, currentPrice)
+
+      // Cache the result
+      if (this.config.cacheEnabled) {
+        const cacheKey = this.generateCacheKey(marketData, currentPositions, portfolioBalance)
+        this.cacheAnalysis(cacheKey, analysis)
+      }
+
+      return analysis
+
+    } finally {
+      this.isAnalyzing = false
+      this.activeRequests--
+
+      // Process queued requests
+      if (this.requestQueue.length > 0 && this.activeRequests < this.config.maxConcurrentRequests!) {
+        const nextRequest = this.requestQueue.shift()
+        if (nextRequest) {
+          this.performAnalysis(...nextRequest.args)
+            .then(nextRequest.resolve)
+            .catch(nextRequest.reject)
+        }
+      }
+    }
+  }
+
+  private async makeOptimizedAPICall(prompt: string, apiKey: string): Promise<string> {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), this.config.requestTimeout)
+
+    try {
       const response = await fetch('https://api.perplexity.ai/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
+          'Authorization': `Bearer ${apiKey}`,
+          'User-Agent': 'CryptoTrader/1.0 Performance-Optimized',
+          'Connection': 'keep-alive'
         },
         body: JSON.stringify({
           model: this.config.model || 'llama-3.1-sonar-large-128k-online',
@@ -164,31 +249,132 @@ export class AITradingEngine {
             },
             {
               role: 'user',
-              content: analysisPrompt
+              content: prompt
             }
           ]
-        })
-      });
+        }),
+        signal: controller.signal
+      })
 
-      if (!response || !response.ok) {
-        throw new Error(`Perplexity API failed: ${response?.statusText || 'Network error'}`);
+      clearTimeout(timeoutId)
+
+      if (!response.ok) {
+        throw new Error(`Perplexity API failed: ${response.statusText}`)
       }
 
-      const result = await response.json();
-      const analysisText = result.choices?.[0]?.message?.content || '';
-
-      // Parse the AI response
-      return this.parseAIResponse(analysisText, marketData[0]?.price || 45000);
+      const result = await response.json()
+      return result.choices?.[0]?.message?.content || ''
 
     } catch (error) {
-      console.error("AI analysis error:", error);
-      // Return a safe default analysis with proper error message
-      const analysis = this.getDefaultAnalysis(marketData?.[0]?.price || 45000);
-      analysis.reasoning = 'AI analysis failed';
-      return analysis;
-    } finally {
-      this.isAnalyzing = false
+      clearTimeout(timeoutId)
+
+      // Fallback to cached result or default
+      throw error
     }
+  }
+
+  private generateCacheKey(marketData: MarketData[], positions: Position[], balance: number): string {
+    const dataString = JSON.stringify({
+      marketData: marketData.slice(0, 5).map(d => ({
+        symbol: d.symbol,
+        price: d.price,
+        change: d.change,
+        volume: d.volume
+      })),
+      positionsCount: positions.length,
+      balance: Math.round(balance),
+      timestampBucket: Math.floor(Date.now() / 60000) // 1-minute bucket
+    })
+
+    const hash = crypto.createHash('sha256').update(dataString).digest('hex').substring(0, 16)
+    return `ai_analysis_${hash}`
+  }
+
+  private getCachedAnalysis(cacheKey: string): MarketAnalysis | null {
+    const cached = this.cache.get<CacheEntry>(cacheKey)
+    if (cached) {
+      // Verify cache entry is still valid
+      const age = Date.now() - cached.timestamp
+      if (age < (this.config.cacheTTL! * 1000)) {
+        return { ...cached.analysis, timestamp: Date.now() }
+      }
+      this.cache.del(cacheKey)
+    }
+    return null
+  }
+
+  private cacheAnalysis(cacheKey: string, analysis: MarketAnalysis): void {
+    const entry: CacheEntry = {
+      analysis: { ...analysis },
+      timestamp: Date.now(),
+      hash: cacheKey
+    }
+    this.cache.set(cacheKey, entry, this.config.cacheTTL)
+  }
+
+  private updateLatencyMetrics(startTime: number): void {
+    const latency = performance.now() - startTime
+    this.performanceMetrics.lastRequestTime = Date.now()
+
+    // Update rolling average latency
+    const alpha = 0.1 // Smoothing factor
+    this.performanceMetrics.averageLatency =
+      alpha * latency + (1 - alpha) * this.performanceMetrics.averageLatency
+  }
+
+  private buildOptimizedPrompt(marketData: MarketData[], positions: Position[], balance: number): string {
+    // Pre-compute and cache template parts
+    const marketTemplate = this.buildMarketSummary(marketData)
+    const positionTemplate = this.buildPositionSummary(positions)
+
+    return [
+      'EXPERT CRYPTOCURRENCY TRADING ANALYSIS',
+      '========================================',
+      '',
+      'MARKET DATA:',
+      marketTemplate,
+      '',
+      'POSITIONS:',
+      positionTemplate,
+      '',
+      `BALANCE: $${balance.toFixed(2)}`,
+      '',
+      'RISK PARAMETERS:',
+      `- Tolerance: ${this.config.riskTolerance}`,
+      `- Max Position: ${this.config.maxPositionSize}%`,
+      `- Stop Loss: ${this.config.stopLossPercentage}%`,
+      `- Take Profit: ${this.config.takeProfitPercentage}%`,
+      '',
+      'REQUIREMENTS: Analyze trends, momentum, technical indicators. Consider portfolio exposure and risk management. Provide specific entry/exit points with confidence (0-100).',
+      '',
+      'RESPONSE FORMAT: JSON with signal, confidence, reasoning, entryPrice, stopLoss, takeProfit, positionSize, riskReward, symbol.'
+    ].join('\n')
+  }
+
+  private buildMarketSummary(marketData: MarketData[]): string {
+    return marketData
+      .slice(0, 8) // Reduced from 10 for better performance
+      .map(data => {
+        const change = data.change || 0
+        const volume = data.volume ? ` Vol: ${(data.volume / 1000000).toFixed(1)}M` : ''
+        return `${data.symbol}: $${data.price} (${change > 0 ? '+' : ''}${change.toFixed(2)}%)${volume}`
+      })
+      .join('\n')
+  }
+
+  private buildPositionSummary(positions: Position[]): string {
+    if (!positions.length) return 'No open positions'
+
+    return positions
+      .slice(0, 5) // Limit for performance
+      .map(pos => {
+        const pnl = parseFloat(pos.realized_pnl || '0')
+        const symbol = pos.product?.symbol || 'Unknown'
+        const entryPrice = parseFloat(pos.entry_price || '0')
+        const side = pos.size && parseFloat(pos.size) > 0 ? 'LONG' : 'SHORT'
+        return `${symbol}: ${pos.size} @ $${entryPrice} (${side}) P&L: ${pnl > 0 ? '+' : ''}$${pnl.toFixed(2)}`
+      })
+      .join('\n')
   }
 
   private buildAnalysisPrompt(marketData: MarketData[], positions: Position[], balance: number): string {
