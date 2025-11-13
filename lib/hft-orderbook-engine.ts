@@ -293,22 +293,33 @@ export class RealTimeOrderBook {
   }
 
   getDepth(levels: number = 5): { bid: number; ask: number } {
-    const bidDepth = this.bids.slice(0, levels).reduce((sum, level) => sum + level.size, 0);
-    const askDepth = this.asks.slice(0, levels).reduce((sum, level) => sum + level.size, 0);
+    const maxLevels = Math.min(levels, this.bidCount, this.askCount);
+    let bidDepth = 0, askDepth = 0;
+
+    // Optimized calculation using typed arrays
+    for (let i = 0; i < Math.min(levels, this.bidCount); i++) {
+      bidDepth += this.bidSizes[i];
+    }
+
+    for (let i = 0; i < Math.min(levels, this.askCount); i++) {
+      askDepth += this.askSizes[i];
+    }
+
     return { bid: bidDepth, ask: askDepth };
   }
 
   getVolumeWeightedAveragePrice(side: 'bid' | 'ask', volume: number): number {
-    const levels = side === 'bid' ? this.bids : this.asks;
+    const prices = side === 'bid' ? this.bidPrices : this.askPrices;
+    const sizes = side === 'bid' ? this.bidSizes : this.askSizes;
+    const count = side === 'bid' ? this.bidCount : this.askCount;
+
     let remainingVolume = volume;
     let totalCost = 0;
     let totalVolume = 0;
 
-    for (const level of levels) {
-      if (remainingVolume <= 0) break;
-
-      const volumeAtLevel = Math.min(remainingVolume, level.size);
-      totalCost += volumeAtLevel * level.price;
+    for (let i = 0; i < count && remainingVolume > 0; i++) {
+      const volumeAtLevel = Math.min(remainingVolume, sizes[i]);
+      totalCost += volumeAtLevel * prices[i];
       totalVolume += volumeAtLevel;
       remainingVolume -= volumeAtLevel;
     }
@@ -317,17 +328,55 @@ export class RealTimeOrderBook {
   }
 
   getVolatility(periods: number = 20): number {
-    if (this.priceHistory.length < periods) return 0;
+    if (this.historySize < periods) return 0;
 
-    const recentPrices = this.priceHistory.slice(-periods);
-    const returns = recentPrices.slice(1).map((price, i) =>
-      Math.log(price / recentPrices[i])
-    );
+    // Use circular buffer for efficient volatility calculation
+    let mean = 0;
+    let startIdx = (this.historyIndex - periods + this.maxHistoryLength) % this.maxHistoryLength;
 
-    const meanReturn = returns.reduce((sum, r) => sum + r, 0) / returns.length;
-    const variance = returns.reduce((sum, r) => sum + Math.pow(r - meanReturn, 2), 0) / returns.length;
+    // Calculate mean
+    for (let i = 0; i < periods; i++) {
+      const idx = (startIdx + i) % this.maxHistoryLength;
+      mean += this.priceHistory[idx];
+    }
+    mean /= periods;
+
+    // Calculate variance
+    let variance = 0;
+    for (let i = 0; i < periods; i++) {
+      const idx = (startIdx + i) % this.maxHistoryLength;
+      const diff = this.priceHistory[idx] - mean;
+      variance += diff * diff;
+    }
+    variance /= periods;
 
     return Math.sqrt(variance);
+  }
+
+  // Optimized rolling calculation for incremental updates
+  private rollingMean: number = 0;
+  private rollingVariance: number = 0;
+  private rollingCount: number = 0;
+
+  getRollingVolatility(): number {
+    if (this.historySize < 2) return 0;
+    return Math.sqrt(this.rollingVariance);
+  }
+
+  private updateRollingStats(newPrice: number): void {
+    if (this.historySize === 1) {
+      this.rollingMean = newPrice;
+      this.rollingVariance = 0;
+      this.rollingCount = 1;
+      return;
+    }
+
+    const oldMean = this.rollingMean;
+    this.rollingMean = oldMean + (newPrice - oldMean) / this.historySize;
+
+    const oldVariance = this.rollingVariance;
+    const newDiff = newPrice - oldMean;
+    this.rollingVariance = ((this.historySize - 1) * oldVariance + newDiff * (newPrice - this.rollingMean)) / this.historySize;
   }
 
   getMetrics(): OrderBookMetrics {
