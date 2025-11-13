@@ -207,56 +207,89 @@ export class RealTimeOrderBook {
   }
 
   getBestBid(): OrderBookLevel | null {
-    return this.bids.length > 0 ? this.bids[0] : null;
+    if (this.bidCount === 0) return null;
+    const level = RealTimeOrderBook.levelPool.get();
+    level.price = this.bidPrices[0];
+    level.size = this.bidSizes[0];
+    level.orders = 1;
+    return level;
   }
 
   getBestAsk(): OrderBookLevel | null {
-    return this.asks.length > 0 ? this.asks[0] : null;
+    if (this.askCount === 0) return null;
+    const level = RealTimeOrderBook.levelPool.get();
+    level.price = this.askPrices[0];
+    level.size = this.askSizes[0];
+    level.orders = 1;
+    return level;
   }
 
   getSpread(): number {
-    const bid = this.getBestBid();
-    const ask = this.getBestAsk();
-    return bid && ask ? ask.price - bid.price : NaN;
+    return this.bidCount > 0 && this.askCount > 0 ?
+      this.askPrices[0] - this.bidPrices[0] : NaN;
   }
 
   getMidPrice(): number {
-    const bid = this.getBestBid();
-    const ask = this.getBestAsk();
-    return bid && ask ? (bid.price + ask.price) / 2 : NaN;
+    return this.bidCount > 0 && this.askCount > 0 ?
+      (this.bidPrices[0] + this.askPrices[0]) / 2 : NaN;
   }
 
   getWeightedMidPrice(): number {
-    const bid = this.getBestBid();
-    const ask = this.getBestAsk();
-    if (!bid || !ask) return NaN;
+    if (this.bidCount === 0 || this.askCount === 0) return NaN;
 
-    const totalSize = bid.size + ask.size;
-    return totalSize > 0 ? (bid.price * ask.size + ask.price * bid.size) / totalSize : this.getMidPrice();
+    const bidSize = this.bidSizes[0];
+    const askSize = this.askSizes[0];
+    const totalSize = bidSize + askSize;
+
+    return totalSize > 0 ?
+      (this.bidPrices[0] * askSize + this.askPrices[0] * bidSize) / totalSize :
+      this.getMidPrice();
   }
 
   getMicroPrice(): number {
     // Micro price considers the next level in the book
-    if (this.bids.length < 2 || this.asks.length < 2) return this.getMidPrice();
+    if (this.bidCount < 2 || this.askCount < 2) return this.getMidPrice();
 
-    const bid1 = this.bids[0];
-    const bid2 = this.bids[1];
-    const ask1 = this.asks[0];
-    const ask2 = this.asks[1];
+    const bid1Size = this.bidSizes[0];
+    const ask1Size = this.askSizes[0];
+    const ask1Price = this.askPrices[0];
+    const bid1Price = this.bidPrices[0];
 
-    const bidWeight = bid1.size / (bid1.size + ask1.size);
-    const askWeight = ask1.size / (bid1.size + ask1.size);
+    const bidWeight = bid1Size / (bid1Size + ask1Size);
+    const askWeight = ask1Size / (bid1Size + ask1Size);
 
-    return bidWeight * ask1.price + askWeight * bid1.price;
+    return bidWeight * ask1Price + askWeight * bid1Price;
   }
 
   getOrderBookImbalance(): number {
-    const bid = this.getBestBid();
-    const ask = this.getBestAsk();
-    if (!bid || !ask) return 0;
+    if (this.bidCount === 0 || this.askCount === 0) return 0;
 
-    const totalVolume = bid.size + ask.size;
-    return totalVolume > 0 ? (bid.size - ask.size) / totalVolume : 0;
+    const bidSize = this.bidSizes[0];
+    const askSize = this.askSizes[0];
+    const totalSize = bidSize + askSize;
+
+    return totalSize > 0 ? (bidSize - askSize) / totalSize : 0;
+  }
+
+  // Fast binary search for price levels
+  private findBidLevel(price: number): number {
+    let left = 0, right = this.bidCount;
+    while (left < right) {
+      const mid = Math.floor((left + right) / 2);
+      if (this.bidPrices[mid] < price) right = mid;
+      else left = mid + 1;
+    }
+    return left;
+  }
+
+  private findAskLevel(price: number): number {
+    let left = 0, right = this.askCount;
+    while (left < right) {
+      const mid = Math.floor((left + right) / 2);
+      if (this.askPrices[mid] > price) right = mid;
+      else left = mid + 1;
+    }
+    return left;
   }
 
   getDepth(levels: number = 5): { bid: number; ask: number } {
