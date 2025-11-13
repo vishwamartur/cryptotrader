@@ -1,6 +1,50 @@
 // HFT Order Book Modeling & Tick-Level Strategy Engine
 // For ultra-low latency, event-driven trading with advanced market microstructure analysis
 
+import { performance } from "perf_hooks"
+
+interface ObjectPool<T> {
+  get(): T;
+  release(obj: T): void;
+  clear(): void;
+  size(): number;
+}
+
+class GenericObjectPool<T> implements ObjectPool<T> {
+  private pool: T[] = [];
+  private createFn: () => T;
+  private resetFn: (obj: T) => void;
+  private maxSize: number;
+
+  constructor(createFn: () => T, resetFn: (obj: T) => void, maxSize: number = 1000) {
+    this.createFn = createFn;
+    this.resetFn = resetFn;
+    this.maxSize = maxSize;
+  }
+
+  get(): T {
+    if (this.pool.length > 0) {
+      return this.pool.pop()!;
+    }
+    return this.createFn();
+  }
+
+  release(obj: T): void {
+    if (this.pool.length < this.maxSize) {
+      this.resetFn(obj);
+      this.pool.push(obj);
+    }
+  }
+
+  clear(): void {
+    this.pool.length = 0;
+  }
+
+  size(): number {
+    return this.pool.length;
+  }
+}
+
 export interface OrderBookLevel {
   price: number;
   size: number;
@@ -12,6 +56,18 @@ export interface OrderBookSnapshot {
   asks: OrderBookLevel[];
   timestamp: number;
   sequence?: number; // Sequence number for ordering
+}
+
+// Performance optimized OrderBookSnapshot using typed arrays
+export interface OptimizedOrderBookSnapshot {
+  bidPrices: Float64Array;
+  bidSizes: Float64Array;
+  askPrices: Float64Array;
+  askSizes: Float64Array;
+  timestamp: number;
+  sequence?: number;
+  bidCount: number;
+  askCount: number;
 }
 
 export interface Trade {
