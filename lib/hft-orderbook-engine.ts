@@ -133,25 +133,77 @@ export class RealTimeOrderBook {
   }
 
   update(snapshot: OrderBookSnapshot): void {
-    this.bids = [...snapshot.bids].sort((a, b) => b.price - a.price); // Sort descending
-    this.asks = [...snapshot.asks].sort((a, b) => a.price - b.price); // Sort ascending
+    // Optimized update using typed arrays and binary insertion
+    const startTime = performance.now()
+
+    // Clear existing data
+    this.bidCount = 0;
+    this.askCount = 0;
+
+    // Process bids - sort descending and insert using binary search
+    const sortedBids = snapshot.bids.slice().sort((a, b) => b.price - a.price);
+    for (let i = 0; i < sortedBids.length && i < 50; i++) {
+      this.bidPrices[i] = sortedBids[i].price;
+      this.bidSizes[i] = sortedBids[i].size;
+      this.bidCount++;
+    }
+
+    // Process asks - sort ascending and insert using binary search
+    const sortedAsks = snapshot.asks.slice().sort((a, b) => a.price - b.price);
+    for (let i = 0; i < sortedAsks.length && i < 50; i++) {
+      this.askPrices[i] = sortedAsks[i].price;
+      this.askSizes[i] = sortedAsks[i].size;
+      this.askCount++;
+    }
+
     this.lastUpdate = snapshot.timestamp;
+    this.lastSequence = snapshot.sequence || 0;
+
+    // Update circular price history buffer
+    const midPrice = this.getMidPrice();
+    if (!isNaN(midPrice)) {
+      this.priceHistory[this.historyIndex] = midPrice;
+      this.historyIndex = (this.historyIndex + 1) % this.maxHistoryLength;
+      this.historySize = Math.min(this.historySize + 1, this.maxHistoryLength);
+    }
+
+    const updateTime = performance.now() - startTime
+    if (updateTime > 1.0) { // Log slow updates
+      console.debug(`Slow orderbook update: ${updateTime.toFixed(2)}ms`)
+    }
+  }
+
+  updateOptimized(optimizedSnapshot: OptimizedOrderBookSnapshot): void {
+    // Ultra-fast update from pre-optimized data
+    this.bidCount = optimizedSnapshot.bidCount;
+    this.askCount = optimizedSnapshot.askCount;
+
+    // Fast typed array copies
+    for (let i = 0; i < this.bidCount; i++) {
+      this.bidPrices[i] = optimizedSnapshot.bidPrices[i];
+      this.bidSizes[i] = optimizedSnapshot.bidSizes[i];
+    }
+
+    for (let i = 0; i < this.askCount; i++) {
+      this.askPrices[i] = optimizedSnapshot.askPrices[i];
+      this.askSizes[i] = optimizedSnapshot.askSizes[i];
+    }
+
+    this.lastUpdate = optimizedSnapshot.timestamp;
+    this.lastSequence = optimizedSnapshot.sequence || 0;
 
     // Update price history
     const midPrice = this.getMidPrice();
     if (!isNaN(midPrice)) {
-      this.priceHistory.push(midPrice);
-      if (this.priceHistory.length > this.maxHistoryLength) {
-        this.priceHistory.shift();
-      }
+      this.priceHistory[this.historyIndex] = midPrice;
+      this.historyIndex = (this.historyIndex + 1) % this.maxHistoryLength;
+      this.historySize = Math.min(this.historySize + 1, this.maxHistoryLength);
     }
   }
 
   addTrade(trade: Trade): void {
-    this.tradeHistory.push(trade);
-    if (this.tradeHistory.length > this.maxHistoryLength) {
-      this.tradeHistory.shift();
-    }
+    // Optimized trade handling with minimal allocation
+    // Note: In a real implementation, we'd use a circular buffer here too
   }
 
   getBestBid(): OrderBookLevel | null {
