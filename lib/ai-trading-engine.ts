@@ -1,4 +1,23 @@
 import type { MarketData, Position } from "./types"
+import NodeCache from "node-cache"
+import { debounce } from "lodash"
+import crypto from "crypto"
+import { performance } from "perf_hooks"
+
+interface CacheEntry {
+  analysis: MarketAnalysis
+  timestamp: number
+  hash: string
+}
+
+interface PerformanceMetrics {
+  totalRequests: number
+  cacheHits: number
+  cacheMisses: number
+  averageLatency: number
+  errorRate: number
+  lastRequestTime: number
+}
 
 export interface AITradingConfig {
   apiKey?: string
@@ -11,6 +30,11 @@ export interface AITradingConfig {
   stopLossPercentage?: number
   takeProfitPercentage?: number
   enableAutonomousTrading?: boolean
+  cacheEnabled?: boolean
+  cacheMaxEntries?: number
+  cacheTTL?: number
+  requestTimeout?: number
+  maxConcurrentRequests?: number
 }
 
 export interface MarketAnalysis {
