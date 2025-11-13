@@ -1,5 +1,15 @@
-// Enhanced Market Data Acquisition Interface
+// Enhanced Market Data Acquisition Interface with Multi-Level Caching
 // Provides comprehensive real-time and historical market data with WebSocket support
+// Optimized for >90% cache hit rate and <1ms response time
+
+import { createHash } from 'crypto'
+import { performance } from 'perf_hooks'
+import NodeCache from 'node-cache'
+import { promisify } from 'util'
+import { deflate, inflate } from 'zlib'
+
+const deflateAsync = promisify(deflate)
+const inflateAsync = promisify(inflate)
 
 export interface MarketData {
   symbol: string;
