@@ -53,9 +53,50 @@ export interface MarketAnalysis {
 export class AITradingEngine {
   private config: AITradingConfig
   private isAnalyzing = false
+  private cache: NodeCache
+  private debouncedAnalyzeMarket: Function
+  private performanceMetrics: PerformanceMetrics
+  private requestQueue: Array<{
+    resolve: (value: MarketAnalysis) => void
+    reject: (reason: any) => void
+    args: [MarketData[], Position[], number]
+  }> = []
+  private activeRequests = 0
 
   constructor(config: AITradingConfig) {
-    this.config = config
+    this.config = {
+      cacheEnabled: true,
+      cacheMaxEntries: 1000,
+      cacheTTL: 60, // 1 minute
+      requestTimeout: 1000,
+      maxConcurrentRequests: 5,
+      ...config
+    }
+
+    // Initialize cache with performance optimizations
+    this.cache = new NodeCache({
+      maxKeys: this.config.cacheMaxEntries,
+      stdTTL: this.config.cacheTTL,
+      checkperiod: 30, // Check for expired keys every 30 seconds
+      useClones: false // Disable cloning for better performance
+    })
+
+    // Initialize performance metrics
+    this.performanceMetrics = {
+      totalRequests: 0,
+      cacheHits: 0,
+      cacheMisses: 0,
+      averageLatency: 0,
+      errorRate: 0,
+      lastRequestTime: 0
+    }
+
+    // Create debounced version of analyze method
+    this.debouncedAnalyzeMarket = debounce(
+      this.performAnalysis.bind(this),
+      500,
+      { leading: false, trailing: true }
+    )
   }
 
   async analyzeMarket(
