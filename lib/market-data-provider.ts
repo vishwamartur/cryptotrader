@@ -60,6 +60,382 @@ export interface ConnectionStatus {
   errors: string[];
 }
 
+// Multi-level cache interfaces
+interface CacheEntry<T> {
+  data: T
+  timestamp: number
+  ttl: number
+  compressionRatio?: number
+  accessCount: number
+  lastAccessed: number
+}
+
+interface CachePerformanceMetrics {
+  l1Hits: number
+  l1Misses: number
+  l2Hits: number
+  l2Misses: number
+  l3Hits: number
+  l3Misses: number
+  averageResponseTime: number
+  compressionRatio: number
+  cacheHitRate: number
+  memoryUsage: number
+  redisConnections: number
+}
+
+// Enhanced market data provider with multi-level caching
+export class CachedMarketDataProvider {
+  private l1Cache: NodeCache // In-memory cache
+  private l2Cache: Map<string, any> // Redis cache (simplified for demo)
+  private l3Cache: Map<string, any> // Persistent storage cache (simplified)
+  private metrics: CachePerformanceMetrics
+  private compressionEnabled: boolean = true
+
+  // Cache configuration
+  private readonly L1_MAX_SIZE = 1000
+  private readonly L1_TTL = 60 // 1 minute
+  private readonly L2_TTL = 5 * 60 // 5 minutes
+  private readonly L3_TTL = 60 * 60 // 1 hour
+
+  constructor() {
+    // L1 Cache: In-memory with LRU eviction
+    this.l1Cache = new NodeCache({
+      maxKeys: this.L1_MAX_SIZE,
+      stdTTL: this.L1_TTL,
+      checkperiod: 30,
+      useClones: false // Performance optimization
+    })
+
+    // L2 and L3 caches (simplified - in production would use Redis and SQLite)
+    this.l2Cache = new Map()
+    this.l3Cache = new Map()
+
+    // Initialize metrics
+    this.metrics = {
+      l1Hits: 0,
+      l1Misses: 0,
+      l2Hits: 0,
+      l2Misses: 0,
+      l3Hits: 0,
+      l3Misses: 0,
+      averageResponseTime: 0,
+      compressionRatio: 0,
+      cacheHitRate: 0,
+      memoryUsage: 0,
+      redisConnections: 0
+    }
+  }
+
+  private generateCacheKey(symbol: string, type: string, timestamp?: number): string {
+    const timestampBucket = timestamp ? Math.floor(timestamp / 60000) : Math.floor(Date.now() / 60000)
+    const keyData = `${symbol}:${type}:${timestampBucket}`
+    return createHash('sha256').update(keyData).digest('hex').substring(0, 16)
+  }
+
+  async getMarketData(symbol: string, type: 'realtime' | 'historical' = 'realtime'): Promise<MarketData | null> {
+    const startTime = performance.now()
+    const cacheKey = this.generateCacheKey(symbol, type)
+
+    try {
+      // L1 Cache (In-memory)
+      const l1Result = this.getL1Cache(cacheKey)
+      if (l1Result) {
+        this.metrics.l1Hits++
+        this.updateResponseTime(startTime)
+        return l1Result
+      }
+      this.metrics.l1Misses++
+
+      // L2 Cache (Redis)
+      const l2Result = await this.getL2Cache(cacheKey)
+      if (l2Result) {
+        this.metrics.l2Hits++
+        // Promote to L1
+        this.setL1Cache(cacheKey, l2Result)
+        this.updateResponseTime(startTime)
+        return l2Result
+      }
+      this.metrics.l2Misses++
+
+      // L3 Cache (Persistent storage)
+      const l3Result = await this.getL3Cache(cacheKey)
+      if (l3Result) {
+        this.metrics.l3Hits++
+        // Promote to L2 and L1
+        await this.setL2Cache(cacheKey, l3Result)
+        this.setL1Cache(cacheKey, l3Result)
+        this.updateResponseTime(startTime)
+        return l3Result
+      }
+      this.metrics.l3Misses++
+
+      this.updateResponseTime(startTime)
+      return null
+
+    } catch (error) {
+      console.error('Cache retrieval error:', error)
+      this.updateResponseTime(startTime)
+      return null
+    }
+  }
+
+  async setMarketData(symbol: string, data: MarketData, type: 'realtime' | 'historical' = 'realtime'): Promise<void> {
+    const cacheKey = this.generateCacheKey(symbol, type, data.timestamp)
+
+    try {
+      // Set in all cache levels
+      this.setL1Cache(cacheKey, data)
+      await this.setL2Cache(cacheKey, data)
+      await this.setL3Cache(cacheKey, data)
+    } catch (error) {
+      console.error('Cache set error:', error)
+    }
+  }
+
+  private getL1Cache(cacheKey: string): MarketData | null {
+    const cached = this.l1Cache.get<CacheEntry<MarketData>>(cacheKey)
+    if (!cached) return null
+
+    // Update access tracking
+    cached.accessCount++
+    cached.lastAccessed = Date.now()
+
+    return cached.data
+  }
+
+  private setL1Cache(cacheKey: string, data: MarketData): void {
+    const entry: CacheEntry<MarketData> = {
+      data,
+      timestamp: Date.now(),
+      ttl: this.L1_TTL,
+      accessCount: 1,
+      lastAccessed: Date.now()
+    }
+
+    this.l1Cache.set(cacheKey, entry, this.L1_TTL)
+  }
+
+  private async getL2Cache(cacheKey: string): Promise<MarketData | null> {
+    try {
+      const cached = this.l2Cache.get(cacheKey)
+      if (!cached) return null
+
+      const entry = cached as CacheEntry<string>
+
+      // Check TTL
+      if (Date.now() - entry.timestamp > entry.ttl) {
+        this.l2Cache.delete(cacheKey)
+        return null
+      }
+
+      // Decompress if needed
+      let data: MarketData
+      if (this.compressionEnabled && typeof entry.data === 'string') {
+        const compressed = Buffer.from(entry.data, 'base64')
+        const decompressed = await inflateAsync(compressed)
+        data = JSON.parse(decompressed.toString())
+      } else {
+        data = entry.data as MarketData
+      }
+
+      // Update access stats
+      entry.accessCount++
+      entry.lastAccessed = Date.now()
+
+      return data
+
+    } catch (error) {
+      console.error('L2 cache error:', error)
+      return null
+    }
+  }
+
+  private async setL2Cache(cacheKey: string, data: MarketData): Promise<void> {
+    try {
+      let dataToStore: any = data
+      let compressionRatio = 1
+
+      if (this.compressionEnabled) {
+        const jsonString = JSON.stringify(data)
+        const compressed = await deflateAsync(jsonString)
+        dataToStore = compressed.toString('base64')
+        compressionRatio = compressed.length / jsonString.length
+      }
+
+      const entry: CacheEntry<string> = {
+        data: dataToStore,
+        timestamp: Date.now(),
+        ttl: this.L2_TTL,
+        compressionRatio,
+        accessCount: 1,
+        lastAccessed: Date.now()
+      }
+
+      this.l2Cache.set(cacheKey, entry)
+
+    } catch (error) {
+      console.error('L2 cache set error:', error)
+    }
+  }
+
+  private async getL3Cache(cacheKey: string): Promise<MarketData | null> {
+    try {
+      const cached = this.l3Cache.get(cacheKey)
+      if (!cached) return null
+
+      const entry = cached as CacheEntry<string>
+
+      // Check TTL
+      if (Date.now() - entry.timestamp > entry.ttl) {
+        this.l3Cache.delete(cacheKey)
+        return null
+      }
+
+      // Decompress data
+      let data: MarketData
+      if (this.compressionEnabled && typeof entry.data === 'string') {
+        const compressed = Buffer.from(entry.data, 'base64')
+        const decompressed = await inflateAsync(compressed)
+        data = JSON.parse(decompressed.toString())
+      } else {
+        data = entry.data as MarketData
+      }
+
+      // Update access tracking
+      entry.accessCount++
+      entry.lastAccessed = Date.now()
+
+      return data
+
+    } catch (error) {
+      console.error('L3 cache error:', error)
+      return null
+    }
+  }
+
+  private async setL3Cache(cacheKey: string, data: MarketData): Promise<void> {
+    try {
+      let dataToStore: any = data
+      let compressionRatio = 1
+
+      const jsonString = JSON.stringify(data)
+
+      if (this.compressionEnabled) {
+        const compressed = await deflateAsync(jsonString)
+        dataToStore = compressed.toString('base64')
+        compressionRatio = compressed.length / jsonString.length
+      }
+
+      const entry: CacheEntry<string> = {
+        data: dataToStore,
+        timestamp: Date.now(),
+        ttl: this.L3_TTL,
+        compressionRatio,
+        accessCount: 1,
+        lastAccessed: Date.now()
+      }
+
+      this.l3Cache.set(cacheKey, entry)
+
+    } catch (error) {
+      console.error('L3 cache set error:', error)
+    }
+  }
+
+  private updateResponseTime(startTime: number): void {
+    const responseTime = performance.now() - startTime
+    const alpha = 0.1 // Smoothing factor
+    this.metrics.averageResponseTime = alpha * responseTime + (1 - alpha) * this.metrics.averageResponseTime
+  }
+
+  // Batch operations for better performance
+  async getBatchMarketData(symbols: string[]): Promise<Map<string, MarketData>> {
+    const results = new Map<string, MarketData>()
+    const promises = symbols.map(async (symbol) => {
+      const data = await this.getMarketData(symbol)
+      if (data) results.set(symbol, data)
+    })
+
+    await Promise.all(promises)
+    return results
+  }
+
+  async setBatchMarketData(dataPoints: MarketData[]): Promise<void> {
+    const promises = dataPoints.map(data =>
+      this.setMarketData(data.symbol, data, 'realtime')
+    )
+
+    await Promise.all(promises)
+  }
+
+  // Intelligent cache invalidation
+  async invalidateSymbol(symbol: string, type?: 'realtime' | 'historical'): Promise<void> {
+    const types = type ? [type] : ['realtime', 'historical']
+
+    for (const t of types) {
+      const cacheKey = this.generateCacheKey(symbol, t)
+
+      // Remove from all cache levels
+      this.l1Cache.del(cacheKey)
+      this.l2Cache.delete(cacheKey)
+      this.l3Cache.delete(cacheKey)
+    }
+  }
+
+  // Performance monitoring
+  getCacheMetrics(): CachePerformanceMetrics {
+    this.metrics.memoryUsage = process.memoryUsage().heapUsed / 1024 / 1024 // MB
+    this.metrics.cacheHitRate = this.calculateHitRate()
+
+    return { ...this.metrics }
+  }
+
+  private calculateHitRate(): number {
+    const totalRequests = this.metrics.l1Hits + this.metrics.l1Misses +
+                         this.metrics.l2Hits + this.metrics.l2Misses +
+                         this.metrics.l3Hits + this.metrics.l3Misses
+
+    return totalRequests > 0 ?
+      (this.metrics.l1Hits + this.metrics.l2Hits + this.metrics.l3Hits) / totalRequests : 0
+  }
+
+  // Cache warming strategy
+  async warmCache(symbols: string[]): Promise<void> {
+    try {
+      for (const symbol of symbols) {
+        // Create dummy data for warming (in real implementation, fetch from exchange)
+        const dummyData: MarketData = {
+          symbol,
+          timestamp: Date.now(),
+          price: 45000 + Math.random() * 1000,
+          volume: 1000000,
+          bid: 44999,
+          ask: 45001,
+          high24h: 46000,
+          low24h: 44000,
+          change: (Math.random() - 0.5) * 2000,
+          changePercent: (Math.random() - 0.5) * 10,
+          lastUpdated: Date.now()
+        }
+
+        await this.setMarketData(symbol, dummyData, 'realtime')
+      }
+
+      console.log(`Cache warmed successfully for ${symbols.length} symbols`)
+    } catch (error) {
+      console.error('Cache warming error:', error)
+    }
+  }
+
+  // Cleanup resources
+  clear(): void {
+    this.l1Cache.flushAll()
+    this.l2Cache.clear()
+    this.l3Cache.clear()
+  }
+}
+
 export interface MarketDataProvider {
   // Basic data methods
   getRealtimeData(symbol: string): Promise<MarketData>;
