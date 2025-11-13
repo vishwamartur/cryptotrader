@@ -1,0 +1,404 @@
+{
+  "version": "1.0.0",
+  "environment": "production",
+  "application": "crypto-trading-platform",
+  "performance": {
+    "targets": {
+      "ai_analysis_latency": {
+        "target": 1000,
+        "unit": "ms",
+        "description": "AI trading analysis response time"
+      },
+      "hft_tick_processing": {
+        "target": 0.5,
+        "unit": "ms",
+        "description": "HFT engine tick processing time"
+      },
+      "websocket_latency": {
+        "target": 50,
+        "unit": "ms",
+        "description": "WebSocket message delivery time"
+      },
+      "cache_hit_rate": {
+        "target": 90,
+        "unit": "%",
+        "description": "Overall cache hit rate"
+      },
+      "api_response_time": {
+        "target": 100,
+        "unit": "ms",
+        "description": "95th percentile API response time"
+      },
+      "database_query_time": {
+        "target": 10,
+        "unit": "ms",
+        "description": "Average database query time"
+      },
+      "ml_training_time": {
+        "target": 5,
+        "unit": "seconds",
+        "description": "ML model training for 10k samples"
+      },
+      "ml_inference_time": {
+        "target": 100,
+        "unit": "ms",
+        "description": "ML model inference time"
+      }
+    },
+    "thresholds": {
+      "warning": {
+        "cpu_usage": 70,
+        "memory_usage": 75,
+        "error_rate": 2,
+        "latency_p95": 200
+      },
+      "critical": {
+        "cpu_usage": 85,
+        "memory_usage": 90,
+        "error_rate": 5,
+        "latency_p95": 500
+      }
+    }
+  },
+  "infrastructure": {
+    "minimum": {
+      "cpu_cores": 4,
+      "memory_gb": 16,
+      "storage_gb": 100,
+      "bandwidth_mbps": 100,
+      "node_instances": 1
+    },
+    "recommended": {
+      "cpu_cores": 8,
+      "memory_gb": 32,
+      "storage_gb": 500,
+      "bandwidth_mbps": 1000,
+      "node_instances": 3
+    },
+    "enterprise": {
+      "cpu_cores": 16,
+      "memory_gb": 64,
+      "storage_gb": 1000,
+      "bandwidth_mbps": 10000,
+      "node_instances": 6
+    }
+  },
+  "caching": {
+    "redis": {
+      "cluster_enabled": true,
+      "nodes": [
+        {
+          "host": "redis-primary.example.com",
+          "port": 6379
+        },
+        {
+          "host": "redis-secondary-1.example.com",
+          "port": 6379
+        },
+        {
+          "host": "redis-secondary-2.example.com",
+          "port": 6379
+        }
+      ],
+      "max_memory": "2gb",
+      "eviction_policy": "allkeys-lru",
+      "persistence": {
+        "enabled": true,
+        "save_interval": 300,
+        "append_only": true
+      }
+    },
+    "levels": {
+      "l1_memory": {
+        "max_entries": 1000,
+        "ttl_seconds": 60,
+        "compression_enabled": false
+      },
+      "l2_redis": {
+        "max_entries": 10000,
+        "ttl_seconds": 300,
+        "compression_enabled": true
+      },
+      "l3_persistent": {
+        "max_entries": 100000,
+        "ttl_seconds": 3600,
+        "compression_enabled": true
+      }
+    }
+  },
+  "database": {
+    "postgresql": {
+      "primary": {
+        "host": "postgres-primary.example.com",
+        "port": 5432,
+        "database": "cryptotrader",
+        "ssl_mode": "require"
+      },
+      "replicas": [
+        {
+          "host": "postgres-replica-1.example.com",
+          "port": 5432,
+          "read_only": true
+        },
+        {
+          "host": "postgres-replica-2.example.com",
+          "port": 5432,
+          "read_only": true
+        }
+      ],
+      "connection_pool": {
+        "min_connections": 5,
+        "max_connections": 20,
+        "idle_timeout": 30000,
+        "connection_timeout": 10000,
+        "max_uses": 7500
+      },
+      "performance": {
+        "shared_buffers": "256MB",
+        "effective_cache_size": "1GB",
+        "work_mem": "4MB",
+        "maintenance_work_mem": "64MB",
+        "checkpoint_completion_target": 0.9,
+        "wal_buffers": "16MB",
+        "random_page_cost": 1.1
+      }
+    }
+  },
+  "websockets": {
+    "optimization": {
+      "compression": {
+        "enabled": true,
+        "threshold_bytes": 1024,
+        "level": 6
+      },
+      "batching": {
+        "enabled": true,
+        "max_batch_size": 100,
+        "flush_interval_ms": 5
+      },
+      "binary_protocol": {
+        "enabled": true
+      }
+    },
+    "load_balancing": {
+      "enabled": true,
+      "algorithm": "least_connections",
+      "health_check": {
+        "enabled": true,
+        "interval_ms": 30000,
+        "timeout_ms": 5000
+      }
+    },
+    "connection_limits": {
+      "max_connections": 10000,
+      "max_connections_per_ip": 100,
+      "heartbeat_interval_ms": 30000,
+      "connection_timeout_ms": 10000
+    }
+  },
+  "ai_services": {
+    "perplexity": {
+      "api_endpoint": "https://api.perplexity.ai",
+      "model": "llama-3.1-sonar-large-128k-online",
+      "max_tokens": 4096,
+      "temperature": 0.1,
+      "timeout_ms": 1000,
+      "retry_attempts": 3,
+      "circuit_breaker": {
+        "enabled": true,
+        "threshold": 5,
+        "timeout_ms": 30000
+      }
+    },
+    "optimization": {
+      "caching": {
+        "enabled": true,
+        "ttl_seconds": 60,
+        "max_entries": 1000,
+        "key_hash_algorithm": "sha256"
+      },
+      "debouncing": {
+        "enabled": true,
+        "delay_ms": 500
+      },
+      "request_queue": {
+        "max_concurrent": 5,
+        "max_queue_size": 100
+      }
+    }
+  },
+  "monitoring": {
+    "metrics": {
+      "collection_interval_ms": 5000,
+      "retention_days": 30,
+      "resolution_ms": 1000
+    },
+    "alerts": {
+      "enabled": true,
+      "channels": [
+        {
+          "type": "webhook",
+          "config": {
+            "url": "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
+          }
+        },
+        {
+          "type": "email",
+          "config": {
+            "smtp": {
+              "host": "smtp.gmail.com",
+              "port": 587,
+              "secure": false
+            },
+            "from": "alerts@your-domain.com",
+            "to": ["admin@your-domain.com"]
+          }
+        }
+      ],
+      "cooldown_seconds": 300,
+      "escalation": {
+        "warning_to_critical_minutes": 15,
+        "auto_resolve_minutes": 30
+      }
+    },
+    "health_checks": {
+      "enabled": true,
+      "endpoints": [
+        "/health",
+        "/api/health",
+        "/health/ai",
+        "/health/database",
+        "/health/cache"
+      ],
+      "interval_ms": 30000,
+      "timeout_ms": 5000
+    }
+  },
+  "ml_optimization": {
+    "training": {
+      "batch_size": 32,
+      "epochs": 50,
+      "learning_rate": 0.001,
+      "early_stopping": {
+        "patience": 5,
+        "min_delta": 0.001
+      },
+      "max_training_time_seconds": 300,
+      "validation_split": 0.2
+    },
+    "inference": {
+      "timeout_ms": 100,
+      "batch_size": 1,
+      "enable_quantization": true,
+      "model_cache_size": 5
+    },
+    "hardware": {
+      "enable_gpu": false,
+      "enable_web_worker": false,
+      "memory_limit_mb": 2048,
+      "tensor_optimization": true
+    }
+  },
+  "security": {
+    "rate_limiting": {
+      "enabled": true,
+      "user_limits": {
+        "requests_per_minute": 100,
+        "burst": 20
+      },
+      "ip_limits": {
+        "requests_per_minute": 20,
+        "burst": 5
+      },
+      "premium_limits": {
+        "requests_per_minute": 500,
+        "burst": 100
+      }
+    },
+    "authentication": {
+      "jwt_expiry": 3600,
+      "refresh_token_expiry": 86400,
+      "max_sessions": 5
+    },
+    "cors": {
+      "enabled": true,
+      "origins": ["https://your-domain.com"],
+      "methods": ["GET", "POST", "PUT", "DELETE"],
+      "credentials": true
+    }
+  },
+  "scaling": {
+    "auto_scaling": {
+      "enabled": true,
+      "min_instances": 1,
+      "max_instances": 10,
+      "target_cpu": 70,
+      "target_memory": 75,
+      "scale_up_cooldown": 300,
+      "scale_down_cooldown": 600
+    },
+    "load_balancer": {
+      "type": "application",
+      "algorithm": "round_robin",
+      "health_check": {
+        "path": "/health",
+        "interval": 30,
+        "timeout": 5,
+        "healthy_threshold": 2,
+        "unhealthy_threshold": 3
+      }
+    }
+  },
+  "logging": {
+    "level": "info",
+    "format": "json",
+    "outputs": [
+      "console",
+      "file"
+    ],
+    "file": {
+      "path": "./logs/app.log",
+      "max_size": "100MB",
+      "max_files": 10,
+      "rotate_interval": "daily"
+    },
+    "performance_logs": {
+      "enabled": true,
+      "slow_threshold_ms": 1000,
+      "include_stack_trace": false
+    }
+  },
+  "backup": {
+    "enabled": true,
+    "schedule": "0 2 * * *",
+    "retention_days": 30,
+    "compression": true,
+    "encryption": true,
+    "storage": {
+      "type": "s3",
+      "bucket": "your-backup-bucket",
+      "region": "us-east-1"
+    }
+  },
+  "development": {
+    "hot_reload": true,
+    "source_maps": true,
+    "debug_mode": false,
+    "mock_apis": true,
+    "performance_profiling": true
+  },
+  "testing": {
+    "performance_tests": {
+      "enabled": true,
+      "load_testing": {
+        "concurrent_users": 1000,
+        "duration_minutes": 10,
+        "ramp_up_minutes": 2
+      },
+      "stress_testing": {
+        "max_load": "2x_normal",
+        "duration_minutes": 5
+      }
+    }
+  }
+}
