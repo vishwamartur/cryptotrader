@@ -820,50 +820,145 @@ export class HFTEngine {
   private maxSignalHistory: number = 10000;
   private latencyTracker: Map<string, number[]> = new Map();
 
+  // Performance optimizations
+  private eventBatch: TickEvent[] = [];
+  private batchSize: number = 10;
+  private batchTimeout: number = 5; // 5ms
+  private lastBatchProcess: number = 0;
+  private processingEnabled: boolean = true;
+
+  // Pre-allocated arrays for performance
+  private strategyLatencies: Float64Array;
+  private signalPriorities: Map<string, number> = new Map();
+
+  constructor(batchSize: number = 10, batchTimeout: number = 5) {
+    this.batchSize = batchSize;
+    this.batchTimeout = batchTimeout;
+    this.strategyLatencies = new Float64Array(100); // Track last 100 latencies
+  }
+
   addStrategy(strategy: HFTStrategy): void {
     this.strategies.set(strategy.getName(), strategy);
+    // Initialize priority based on strategy type
+    const strategyName = strategy.getName().toLowerCase();
+    if (strategyName.includes('market') && strategyName.includes('making')) {
+      this.signalPriorities.set(strategy.getName(), 1); // Highest priority
+    } else if (strategyName.includes('arbitrage')) {
+      this.signalPriorities.set(strategy.getName(), 2); // High priority
+    } else {
+      this.signalPriorities.set(strategy.getName(), 3); // Normal priority
+    }
   }
 
   removeStrategy(name: string): void {
     this.strategies.delete(name);
+    this.signalPriorities.delete(name);
   }
 
   processTick(event: TickEvent): HFTSignal[] {
-    const startTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const startTime = performance.now();
+
+    // Add event to batch
+    this.eventBatch.push(event);
+
+    // Process batch if full or timeout reached
+    const shouldProcess = this.eventBatch.length >= this.batchSize ||
+                         (performance.now() - this.lastBatchProcess) > this.batchTimeout;
+
+    if (shouldProcess) {
+      return this.processBatch(startTime);
+    }
+
+    return [];
+  }
+
+  private processBatch(globalStartTime: number): HFTSignal[] {
+    const batchStartTime = performance.now();
     const allSignals: HFTSignal[] = [];
 
-    for (const [name, strategy] of this.strategies) {
+    // Process strategies in priority order for most time-sensitive signals first
+    const prioritizedStrategies = Array.from(this.strategies.entries())
+      .sort(([,a], [,b]) => {
+        const priorityA = this.signalPriorities.get(a.getName()) || 3;
+        const priorityB = this.signalPriorities.get(b.getName()) || 3;
+        return priorityA - priorityB;
+      });
+
+    // Process strategies with early exit conditions
+    for (const [name, strategy] of prioritizedStrategies) {
       if (!strategy.isEnabled()) continue;
 
+      const strategyStartTime = performance.now();
+      let signalsGenerated = 0;
+
       try {
-        const strategyStartTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
-        const signals = strategy.onTick(event);
-        const strategyLatency = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - strategyStartTime;
+        // Process events with early exit for high-priority signals
+        for (const event of this.eventBatch) {
+          const signals = strategy.onTick(event);
 
-        // Track latency
-        if (!this.latencyTracker.has(name)) {
-          this.latencyTracker.set(name, []);
+          // Early exit if critical signals found
+          const hasCritical = signals.some(s => s.urgency === 'critical');
+          if (hasCritical && this.signalPriorities.get(name) === 1) {
+            allSignals.push(...signals);
+            signalsGenerated += signals.length;
+            break; // Skip remaining events for critical market makers
+          }
+
+          signalsGenerated += signals.length;
+          allSignals.push(...signals);
         }
-        const latencies = this.latencyTracker.get(name)!;
-        latencies.push(strategyLatency);
-        if (latencies.length > 1000) latencies.shift();
 
-        allSignals.push(...signals);
+        const strategyLatency = performance.now() - strategyStartTime;
+        this.trackLatency(name, strategyLatency);
+
       } catch (error) {
         console.error(`Error in strategy ${name}:`, error);
       }
     }
 
-    // Store signal history
-    this.signalHistory.push(...allSignals);
-    if (this.signalHistory.length > this.maxSignalHistory) {
-      this.signalHistory.splice(0, this.signalHistory.length - this.maxSignalHistory);
+    // Sort signals by urgency and confidence
+    allSignals.sort((a, b) => {
+      const urgencyOrder = { 'critical': 0, 'high': 1, 'medium': 2, 'low': 3 };
+      const urgencyDiff = urgencyOrder[a.urgency] - urgencyOrder[b.urgency];
+      if (urgencyDiff !== 0) return urgencyDiff;
+      return b.confidence - a.confidence; // Higher confidence first
+    });
+
+    // Update signal history efficiently
+    this.updateSignalHistory(allSignals);
+
+    // Clear batch
+    this.eventBatch.length = 0;
+    this.lastBatchProcess = performance.now();
+
+    const totalLatency = this.lastBatchProcess - globalStartTime;
+
+    // Performance monitoring
+    if (totalLatency > 1.0) { // Log slow processing
+      console.debug(`Slow HFT batch processing: ${totalLatency.toFixed(2)}ms, ${allSignals.length} signals`);
     }
 
-    const totalLatency = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startTime;
-    console.log(`HFT Engine processed tick in ${totalLatency.toFixed(2)}ms, generated ${allSignals.length} signals`);
-
     return allSignals;
+  }
+
+  private trackLatency(strategyName: string, latency: number): void {
+    if (!this.latencyTracker.has(strategyName)) {
+      this.latencyTracker.set(strategyName, []);
+    }
+    const latencies = this.latencyTracker.get(strategyName)!;
+    latencies.push(latency);
+    if (latencies.length > 100) latencies.shift(); // Reduced from 1000 for memory
+  }
+
+  private updateSignalHistory(signals: HFTSignal[]): void {
+    // Efficient array growth without reallocation
+    const newLength = this.signalHistory.length + signals.length;
+    if (newLength > this.maxSignalHistory) {
+      // Remove oldest entries in bulk
+      const removeCount = newLength - this.maxSignalHistory;
+      this.signalHistory.splice(0, removeCount);
+    }
+    this.signalHistory.push(...signals);
   }
 
   getLatencyStats(): { [strategyName: string]: { avg: number; max: number; min: number } } {
