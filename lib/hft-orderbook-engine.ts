@@ -91,15 +91,45 @@ export interface OrderBookMetrics {
 }
 
 export class RealTimeOrderBook {
-  private bids: OrderBookLevel[] = [];
-  private asks: OrderBookLevel[] = [];
+  // Optimized data structures using typed arrays
+  private bidPrices: Float64Array;
+  private bidSizes: Float64Array;
+  private askPrices: Float64Array;
+  private askSizes: Float64Array;
+  private bidCount: number = 0;
+  private askCount: number = 0;
+
+  // Circular buffer for price history
+  private priceHistory: Float64Array;
+  private historyIndex: number = 0;
+  private historySize: number = 0;
+  private maxHistoryLength: number;
+
   private lastUpdate: number = Date.now();
-  private priceHistory: number[] = [];
-  private tradeHistory: Trade[] = [];
-  private maxHistoryLength: number = 1000;
+  private lastSequence: number = 0;
+
+  // Object pools for memory efficiency
+  private static levelPool: ObjectPool<OrderBookLevel> = new GenericObjectPool(
+    () => ({ price: 0, size: 0, orders: 0 }),
+    (level) => { level.price = 0; level.size = 0; level.orders = 0; },
+    1000
+  );
+
+  private static snapshotPool: ObjectPool<OrderBookSnapshot> = new GenericObjectPool(
+    () => ({ bids: [], asks: [], timestamp: 0, sequence: 0 }),
+    (snapshot) => { snapshot.bids.length = 0; snapshot.asks.length = 0; snapshot.timestamp = 0; },
+    500
+  );
 
   constructor(maxHistoryLength: number = 1000) {
     this.maxHistoryLength = maxHistoryLength;
+
+    // Pre-allocate typed arrays for performance
+    this.bidPrices = new Float64Array(50); // Support up to 50 levels
+    this.bidSizes = new Float64Array(50);
+    this.askPrices = new Float64Array(50);
+    this.askSizes = new Float64Array(50);
+    this.priceHistory = new Float64Array(maxHistoryLength);
   }
 
   update(snapshot: OrderBookSnapshot): void {
